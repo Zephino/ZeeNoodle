@@ -6,6 +6,11 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.07] — Tuesday, September 8, 2026, 7:38 PM
+
+### Added
+- `README.md` with start, setup, commands, Quaxly, and GitHub notes. New users need a single place to learn how to run ZeeNoodle.
+
 ## [01.00.06] — Tuesday, September 8, 2026, 7:35 PM
 
 ### Added

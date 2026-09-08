@@ -1,0 +1,28 @@
+---
+description: Ask sequential questions until sure, then wait for go-ahead before changing anything
+alwaysApply: true
+---
+
+# Ask, then wait
+
+Use this process when a request is ambiguous, large, could go more than one way, or is a fix that is not already obvious.
+
+**Skip** when the next action is already obvious (stated one-line change, push/commit when explicitly asked, pure Q&A).
+
+## Process
+
+1. Ask **1–2 strategic questions** at a time until you are about **95% confident** you understand the request.
+2. While questioning, you may **read the codebase** (read-only). Do not edit files, run commits, or push until the user signals go-ahead.
+3. When confident, state **what made you confident**, then write **exactly two lines** describing what you will do.
+4. **Stop and wait** for the user's signal before doing any work.
+
+## Go-ahead signal
+
+- **Plan mode:** the plan confirm / build button.
+- **Agent mode:** explicit words such as `go`, `do it`, or `proceed`. "Ok" or "looks right" alone is not enough.
+
+## Do not
+
+- Dump a long questionnaire in one message.
+- Start edits or commits in the same turn as the two-line summary.
+- Re-ask questions the user already answered.

@@ -1,0 +1,47 @@
+---
+description: Log what and why in CHANGELOG.md with a 12-hour date and time on every version bump
+alwaysApply: true
+---
+
+# Changelog on every version bump
+
+When you bump `VERSION`, add a `CHANGELOG.md` entry in the **same turn**. No silent code edits.
+
+## File
+
+- One changelog only: repo-root `CHANGELOG.md`.
+- Add a **new release section at the top**, below the intro. Do not append new releases at the bottom.
+
+## Heading
+
+Use this exact shape, with the **12-hour** clock and the full date from the session timestamp:
+
+```
+## [01.00.01] — Tuesday, September 8, 2026, 6:35 PM
+```
+
+- Include AM or PM.
+- Do **not** use 24-hour time (`18:35`) or date-only headings.
+
+## Body
+
+List what changed under `### Added`, `### Changed`, or `### Fixed` as appropriate. Omit a heading if that category has no items.
+
+Every bullet must still explain **what** and **why**:
+
+```
+## [01.00.01] — Tuesday, September 8, 2026, 6:35 PM
+
+### Added
+- Discord message scanner that flags giveaway promo links. Needed a first pass that matches the lacewin-style scam pattern in `references/`.
+
+### Changed
+- Promo-code matcher now ignores case. Users paste codes in mixed case.
+
+### Fixed
+- Scanner crashed on empty message content. Empty bodies are skipped.
+```
+
+- **What:** the file or behavior you changed (start of the bullet).
+- **Why:** the reason, after that — not a restatement of the what.
+- Keep it short. One line per change is enough.

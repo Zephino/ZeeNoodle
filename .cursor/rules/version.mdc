@@ -1,0 +1,30 @@
+---
+description: Bump VERSION xx.xx.xx like an odometer on every code-changing interaction
+alwaysApply: true
+---
+
+# Version on every code change
+
+When an interaction **modifies code**, bump the repo-root `VERSION` file in the **same turn**. Do not skip the bump. Do not bump for read-only work, Q&A, or edits that only touch `VERSION` / `CHANGELOG.md`.
+
+## Format
+
+- `xx.xx.xx` — three fields, **two digits each** (`01.00.00`, not `1.0.0`).
+- Starting value: `01.00.00`.
+- Read `VERSION` first, then write the next number.
+
+## Odometer (not semver)
+
+Every code-changing interaction adds `1` to the rightmost field. Size of the change never matters. One interaction, one tick.
+
+When a field goes past `99`, reset it to `00` and add `1` to the field on its left:
+
+- `01.00.00` → `01.00.01`
+- `01.00.99` → `01.01.00`
+- `01.99.99` → `02.00.00`
+
+Do **not** jump major or middle fields because a change feels "big." Describe size in the changelog, not in the number.
+
+## Same-turn rule
+
+Bump once per interaction, even if you touch many files. Keep `VERSION` as the only version source of truth.

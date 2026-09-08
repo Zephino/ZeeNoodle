@@ -3,8 +3,10 @@ setlocal
 cd /d "%~dp0"
 
 echo ZeeNoodle starter
-echo Default: install the bot on Quaxly (https://quaxly.com/).
+echo You can run this file again anytime.
+echo Default: install or refresh the bot on Quaxly (https://quaxly.com/).
 echo.
+set "UPDATED=0"
 
 set "PY="
 py -3 -c "import sys" >nul 2>&1
@@ -42,9 +44,45 @@ if errorlevel 1 (
 
 where git >nul 2>&1
 if errorlevel 1 (
-    echo Warning: git is not installed. Local GitHub backup needs git. Quaxly can still use the GitHub API.
+    echo Warning: git is not installed. Updates and local GitHub backup need git.
 )
 
+echo.
+set /p DOUPD=Update ZeeNoodle from GitHub first? [y/N]: 
+if /i "%DOUPD%"=="y" goto DOUPDATE
+if /i "%DOUPD%"=="yes" goto DOUPDATE
+goto AFTERUPDATE
+
+:DOUPDATE
+if not exist ".git" (
+    echo This folder is not a git repo, so there is nothing to pull.
+    echo Clone your own repo, or skip update.
+    goto AFTERUPDATE
+)
+where git >nul 2>&1
+if errorlevel 1 (
+    echo git is required to update. Install git, then run start.bat again.
+    pause
+    exit /b 1
+)
+echo Pulling latest code...
+git pull --ff-only
+if errorlevel 1 (
+    echo git pull failed. Fix the repo, then run start.bat again.
+    pause
+    exit /b 1
+)
+echo Reinstalling Python packages...
+%PY% -m pip install -r requirements.txt
+if errorlevel 1 (
+    echo pip install failed after update.
+    pause
+    exit /b 1
+)
+set "UPDATED=1"
+echo Local files updated. Next we can refresh the copy you already host.
+
+:AFTERUPDATE
 echo.
 echo Host on Quaxly by default.
 set /p HOSTQ=Use Quaxly? [Y/n]: 
@@ -64,8 +102,13 @@ if not exist ".env" (
     )
 )
 echo.
-echo Starting the Quaxly helper. Log in at quaxly.com in your browser.
-%PY% deploy.py
+if "%UPDATED%"=="1" (
+    echo Refreshing the ZeeNoodle bot already on Quaxly.
+    %PY% deploy.py --update
+) else (
+    echo Starting the Quaxly helper. Log in at quaxly.com in your browser.
+    %PY% deploy.py
+)
 pause
 exit /b 0
 
@@ -76,8 +119,9 @@ echo.
 echo 1. First-time Discord setup (creates .env)
 echo 2. Run ZeeNoodle on this Windows PC now
 echo 3. Show how to run it on your own server
+echo 4. Update from GitHub, then return to this menu
 echo.
-set /p CHOICE=Choose 1, 2, or 3: 
+set /p CHOICE=Choose 1, 2, 3, or 4: 
 
 if "%CHOICE%"=="1" (
     %PY% setup.py
@@ -111,10 +155,52 @@ if "%CHOICE%"=="3" (
     echo 5. Start and keep it running: python bot.py
     echo 6. On Windows you can use Task Scheduler to run start.bat after login.
     echo    On Linux use systemd or screen/tmux so it restarts after reboot.
+    echo 7. To update later, run start.bat again and choose Update from GitHub.
     echo.
     pause
     exit /b 0
 )
+if "%CHOICE%"=="4" goto DOUPDATE_SELF
+
+echo Unknown choice.
+pause
+exit /b 1
+
+:DOUPDATE_SELF
+if not exist ".git" (
+    echo This folder is not a git repo, so there is nothing to pull.
+    goto SELFHOST
+)
+where git >nul 2>&1
+if errorlevel 1 (
+    echo git is required to update.
+    goto SELFHOST
+)
+echo Pulling latest code...
+git pull --ff-only
+if errorlevel 1 (
+    echo git pull failed.
+    pause
+    goto SELFHOST
+)
+echo Reinstalling Python packages...
+%PY% -m pip install -r requirements.txt
+echo Local files updated.
+set /p RUNNOW=Restart ZeeNoodle on this PC now? [y/N]: 
+if /i "%RUNNOW%"=="y" goto RUNLOCAL
+if /i "%RUNNOW%"=="yes" goto RUNLOCAL
+echo Stop the old process, then choose 2 when you are ready.
+goto SELFHOST
+
+:RUNLOCAL
+if not exist ".env" (
+    echo No .env yet. Starting Discord setup first...
+    %PY% setup.py
+)
+echo Starting the updated bot. Close any old ZeeNoodle window first.
+%PY% bot.py
+pause
+exit /b 0
 
 echo Unknown choice.
 pause

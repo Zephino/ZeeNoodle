@@ -6,6 +6,16 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.09] — Tuesday, September 8, 2026, 7:41 PM
+
+### Added
+- `deploy.py --update` and a starter path that replaces files on the ZeeNoodle bot already hosted on Quaxly (or restarts a local copy). A local git pull alone does not update the running host.
+
+## [01.00.08] — Tuesday, September 8, 2026, 7:40 PM
+
+### Added
+- Optional GitHub update step in `start.bat` when you rerun it. Operators need a way to pull new code, then keep using Quaxly or self-host.
+
 ## [01.00.07] — Tuesday, September 8, 2026, 7:38 PM
 
 ### Added

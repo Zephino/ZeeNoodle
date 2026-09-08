@@ -16,11 +16,12 @@ Current version is in `VERSION` (`xx.xx.xx`).
 
 ## Windows start
 
-1. Double-click `start.bat`.
+1. Double-click `start.bat`. You can run it again anytime.
 2. It installs Python packages if needed.
-3. **Use Quaxly? [Y/n]**
+3. **Update ZeeNoodle from GitHub first? [y/N]** — optional `git pull` plus pip install, then refresh the bot you already host (new Quaxly zip/redeploy, or restart a local process).
+4. **Use Quaxly? [Y/n]**
    - **Y** (default): Discord setup if `.env` is missing, then the Quaxly upload walkthrough.
-   - **n**: self-host menu (setup, run on this PC, or print server steps).
+   - **n**: self-host menu (setup, run on this PC, server steps, or update again).
 
 `start.bat` never asks for a Quaxly password. You log in at [quaxly.com](https://quaxly.com/) in your browser.
 

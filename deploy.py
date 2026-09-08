@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import sys
 import zipfile
 from pathlib import Path
 import webbrowser
@@ -88,7 +89,16 @@ def build_zip() -> Path:
     return ZIP_PATH
 
 
-def main() -> None:
+def _print_secret_hints() -> None:
+    print("Start command: python bot.py")
+    print("Set DATA_DIR to the volume path if Quaxly shows one.\n")
+    print("Keys (copy values from your local .env; tokens are not printed):")
+    for key, present in _env_status().items():
+        mark = "set in local .env" if present else "not set locally"
+        print(f"  {key}  ({mark})")
+
+
+def main(update_existing: bool = False) -> None:
     print("ZeeNoodle Quaxly deploy helper")
     print("This script does not ask for a Quaxly password.")
     print("Log in at quaxly.com in your own browser.\n")
@@ -99,7 +109,22 @@ def main() -> None:
 
     print("Step 1: Opening Quaxly.")
     webbrowser.open(QUAXLY_URL)
-    input("Create an account or log in yourself, then press Enter...")
+    input("Log in yourself, then press Enter...")
+
+    if update_existing:
+        print("\nStep 2: Open the ZeeNoodle bot you already host. Do not create a second bot.")
+        print("Replace its files:")
+        print("  - Zip upload: upload this new zip over the existing bot, then restart/redeploy.")
+        print("  - GitHub connected: click Redeploy (or pull latest, then restart).")
+        print(f"  Zip: {zip_path}")
+        input("Press Enter after the hosted files are replaced...")
+        print("\nStep 3: Leave existing secrets as they are unless you changed .env.")
+        _print_secret_hints()
+        input("\nPress Enter after the hosted bot has restarted...")
+        print("\nStep 4: Open live logs.")
+        print("Wait until you see: ZeeNoodle logged in as ...")
+        print("The hosted bot should now be running the updated files.")
+        return
 
     print("\nStep 2: Create a bot named ZeeNoodle.")
     print("Upload this zip, or connect YOUR GitHub repo (do not use someone else's).")
@@ -107,12 +132,7 @@ def main() -> None:
     input("Press Enter after the code is uploaded...")
 
     print("\nStep 3: Add encrypted environment variables in the Quaxly panel.")
-    print("Start command: python bot.py")
-    print("Set DATA_DIR to the volume path if Quaxly shows one.\n")
-    print("Keys to paste (copy values from your local .env; tokens are not printed):")
-    for key, present in _env_status().items():
-        mark = "set in local .env" if present else "not set locally"
-        print(f"  {key}  ({mark})")
+    _print_secret_hints()
     input("\nPress Enter after you saved the secrets...")
 
     print("\nStep 4: Deploy and open live logs.")
@@ -121,4 +141,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    main(update_existing="--update" in sys.argv)

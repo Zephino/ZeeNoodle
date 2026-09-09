@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import io
 import os
+import random
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -23,7 +24,7 @@ from github_backup import (
     run_restore,
 )
 from ignore_list import IgnoreStore
-from paths import ignore_file, references_dir, seed_data_dir
+from paths import data_root, ignore_file, references_dir, seed_data_dir
 
 load_dotenv()
 BURST_SECONDS = 30
@@ -106,6 +107,23 @@ class ZeeNoodle(commands.Bot):
         self.session = aiohttp.ClientSession()
         await self.add_cog(StaffCog(self))
         mirror_backup()
+        self.loop.create_task(self._keepalive_loop())
+
+    async def _keepalive_loop(self) -> None:
+        """Write a heartbeat file at a random interval (12–20 h) to keep the
+        hosting container active and avoid inactivity suspension."""
+        heartbeat_path = data_root() / "heartbeat.txt"
+        while not self.is_closed():
+            delay = random.uniform(12 * 3600, 20 * 3600)  # 12–20 hours in seconds
+            await asyncio.sleep(delay)
+            try:
+                heartbeat_path.write_text(
+                    f"alive at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n",
+                    encoding="utf-8",
+                )
+                print(f"[keepalive] heartbeat written ({delay / 3600:.1f} h interval)")
+            except Exception as exc:  # noqa: BLE001
+                print(f"[keepalive] write failed: {exc}")
 
     async def close(self) -> None:
         if self.session:
@@ -314,6 +332,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}ignore remove #channel` — scan that channel again.",
             f"`{prefix}ignore list` — show ignored channels.",
             f"`{prefix}zeenoodletrigger <new>` — change the prefix (admins).",
+            f"`{prefix}picture test` — attach an image to see if it would be deleted.",
             f"`{prefix}backup` — save pictures and ignore list (GitHub if configured).",
             f"`{prefix}restore` — pull that backup and put it back (`{prefix}pull` works too).",
         ]
@@ -359,6 +378,25 @@ class StaffCog(commands.Cog):
         if note:
             text += f"\n{note}"
         await ctx.send(text)
+
+    @picture.command(name="test")
+    async def picture_test(self, ctx: commands.Context) -> None:
+        images = [item for item in ctx.message.attachments if _is_image_attachment(item)]
+        if not images:
+            await ctx.send("Attach an image to test.")
+            return
+        lines: list[str] = []
+        for attachment in images:
+            data = await attachment.read()
+            hits = self.bot.detector.match_image(data)
+            if hits:
+                reasons = ", ".join(
+                    f"`{h.reference}` (distance {h.distance})" for h in hits
+                )
+                lines.append(f"`{attachment.filename}` **would be deleted** — matched {reasons}.")
+            else:
+                lines.append(f"`{attachment.filename}` would **not** match any reference image.")
+        await ctx.send("\n".join(lines))
 
     @picture.command(name="list")
     async def picture_list(self, ctx: commands.Context) -> None:

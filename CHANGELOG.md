@@ -6,6 +6,36 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.14] — Tuesday, September 8, 2026, 9:12 PM
+
+### Changed
+- Waifly and Quaxly walkthroughs now say to click Start after `.env` is uploaded, then wait on the console through `pip install` until `ZeeNoodle logged in as ...`. The first install is slow and it was easy to stop after the file upload.
+
+## [01.00.13] — Tuesday, September 8, 2026, 8:50 PM
+
+### Added
+- `start.bat` now reads `.env` and prints each setting as filled, blank, or still needed. Tokens stay hidden. Users were reopening the starter and could not tell what was already saved.
+
+### Changed
+- Starter asks whether to open the setup form after that readout. Changing values no longer requires remembering to run `setup.py` by hand.
+
+## [01.00.12] — Tuesday, September 8, 2026, 8:33 PM
+
+### Added
+- `_keepalive_loop` background task in `bot.py`. Writes a timestamp to `heartbeat.txt` at a random interval between 12 and 20 hours. Keeps the Waifly container active so it is not suspended for inactivity.
+
+## [01.00.11] — Tuesday, September 8, 2026, 8:28 PM
+
+### Added
+- `deploy.py --waifly` flag with a step-by-step Waifly upload walkthrough. Quaxly nodes were full so users need an alternative host.
+- `deploy.py --waifly --update` path for refreshing an existing Waifly bot after a code update.
+- `start.bat` host selection menu (Quaxly / Waifly / Self-host). Previously defaulted to Quaxly only with no way to pick Waifly.
+
+## [01.00.10] — Tuesday, September 8, 2026, 7:44 PM
+
+### Added
+- `picture test` command. Attach an image and the bot replies whether it would be deleted and which reference it matched. Needed a quick way to check images before adding them as references.
+
 ## [01.00.09] — Tuesday, September 8, 2026, 7:41 PM
 
 ### Added

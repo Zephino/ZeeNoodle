@@ -4,7 +4,6 @@ cd /d "%~dp0"
 
 echo ZeeNoodle starter
 echo You can run this file again anytime.
-echo Default: install or refresh the bot on Quaxly (https://quaxly.com/).
 echo.
 set "UPDATED=0"
 
@@ -48,6 +47,29 @@ if errorlevel 1 (
 )
 
 echo.
+echo ========================================
+echo Your .env settings
+echo ========================================
+%PY% envutil.py
+echo.
+set /p DOSETUP=Open the setup form to fill in or change these? [y/N]: 
+if /i "%DOSETUP%"=="y" goto RUNSETUP
+if /i "%DOSETUP%"=="yes" goto RUNSETUP
+goto AFTERSETUP
+
+:RUNSETUP
+%PY% setup.py
+if errorlevel 1 (
+    echo Setup failed.
+    pause
+    exit /b 1
+)
+echo.
+echo Settings after the form:
+%PY% envutil.py
+
+:AFTERSETUP
+echo.
 set /p DOUPD=Update ZeeNoodle from GitHub first? [y/N]: 
 if /i "%DOUPD%"=="y" goto DOUPDATE
 if /i "%DOUPD%"=="yes" goto DOUPDATE
@@ -84,10 +106,18 @@ echo Local files updated. Next we can refresh the copy you already host.
 
 :AFTERUPDATE
 echo.
-echo Host on Quaxly by default.
-set /p HOSTQ=Use Quaxly? [Y/n]: 
-if /i "%HOSTQ%"=="n" goto SELFHOST
-if /i "%HOSTQ%"=="no" goto SELFHOST
+echo Where do you want to host ZeeNoodle?
+echo   1. Quaxly  (quaxly.com)
+echo   2. Waifly  (waifly.com) -- recommended if Quaxly is full
+echo   3. Self-host on this PC or your own server
+echo.
+set /p HOSTCHOICE=Choose 1, 2, or 3: 
+if "%HOSTCHOICE%"=="1" goto QUAXLY
+if "%HOSTCHOICE%"=="2" goto WAIFLY
+if "%HOSTCHOICE%"=="3" goto SELFHOST
+echo Unknown choice.
+pause
+exit /b 1
 
 :QUAXLY
 echo.
@@ -108,6 +138,29 @@ if "%UPDATED%"=="1" (
 ) else (
     echo Starting the Quaxly helper. Log in at quaxly.com in your browser.
     %PY% deploy.py
+)
+pause
+exit /b 0
+
+:WAIFLY
+echo.
+echo Waifly path: Discord app first (if needed), then the upload walkthrough.
+if not exist ".env" (
+    echo No .env yet. Starting Discord setup...
+    %PY% setup.py
+    if errorlevel 1 (
+        echo Setup failed.
+        pause
+        exit /b 1
+    )
+)
+echo.
+if "%UPDATED%"=="1" (
+    echo Refreshing the ZeeNoodle bot already on Waifly.
+    %PY% deploy.py --waifly --update
+) else (
+    echo Starting the Waifly helper. Log in at waifly.com in your browser.
+    %PY% deploy.py --waifly
 )
 pause
 exit /b 0

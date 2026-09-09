@@ -66,7 +66,19 @@ Administrators only:
 2. Upload `dist/zeenoodle-quaxly.zip` (no `.env`) or connect **your** GitHub repo.
 3. Set secrets in the Quaxly panel. Start command: `python bot.py`.
 4. If Quaxly shows a volume path, set `DATA_DIR` so pictures survive deploys.
-5. Watch logs for `ZeeNoodle logged in as ...`.
+5. Click Start or Deploy, then stay on the logs. The first install can take several minutes. Wait for `ZeeNoodle logged in as ...` before you leave.
+
+## Hosting on Waifly
+
+[Waifly](https://waifly.com/) is the fallback when Quaxly nodes are full. Run `start.bat` and choose Waifly, or run `python deploy.py --waifly`.
+
+1. Create a Python server named ZeeNoodle.
+2. Upload `dist/zeenoodle-quaxly.zip` on the Files tab, then Unarchive.
+3. Upload your local `.env` into the same folder as `bot.py`.
+4. Confirm Startup Command 1 is `pip install -r requirements.txt` and Command 2 is `python bot.py`.
+5. Open Console and click **Start**. The bot stays offline until you do this.
+6. Stay on Console. `pip install` can take several minutes. Do not click Start again.
+7. Wait until you see `ZeeNoodle logged in as ...`. That line means login finished.
 
 ## GitHub backup (optional)
 

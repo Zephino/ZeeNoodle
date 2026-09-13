@@ -68,9 +68,9 @@ Administrators only:
 
 **Cleanup**
 
-- `!cleanup last <n>` — scan the last n messages in every public, non-ignored channel and delete any scam messages (max 10 000)
+- `!cleanup last <x>` — scan the last x messages in every public, non-ignored channel and delete any scam messages (max 10 000)
 - `!cleanup since <YYYY-MM-DD>` — same scan but starting from a specific date
-- `!cleanup here <n>` — same as `last` but scoped to the current channel only
+- `!cleanup here <x>` — same as `last` but scoped to the current channel only
 
 **Other**
 

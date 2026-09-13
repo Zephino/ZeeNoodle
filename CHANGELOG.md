@@ -6,6 +6,20 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.22] — Sunday, September 13, 2026, 2:16 PM
+
+### Changed
+- Cleanup command placeholders changed from `<n>` to `<x>` in `!help` output and README.
+
+---
+
+## [01.00.21] — Sunday, September 13, 2026, 2:14 PM
+
+### Changed
+- `!help` header now reads `ZeeNoodle <version> commands (prefix ...)` so the running version is visible at a glance.
+
+---
+
 ## [01.00.20] — Sunday, September 13, 2026, 10:20 AM
 
 ### Fixed

@@ -24,9 +24,10 @@ from github_backup import (
     run_restore,
 )
 from ignore_list import IgnoreStore
-from paths import data_root, ignore_file, references_dir, seed_data_dir
+from paths import PROJECT_ROOT, data_root, ignore_file, references_dir, seed_data_dir
 
 load_dotenv()
+BOT_VERSION = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
 INCIDENT_CHANNEL_ID = int(os.environ.get("INCIDENT_CHANNEL_ID", "1547016477104672798"))
 HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 
@@ -335,7 +336,7 @@ class StaffCog(commands.Cog):
     async def help_command(self, ctx: commands.Context) -> None:
         prefix = self.bot.prefix_value
         lines = [
-            f"ZeeNoodle commands (prefix `{prefix}`):",
+            f"ZeeNoodle {BOT_VERSION} commands (prefix `{prefix}`):",
             f"`{prefix}help` — list commands.",
             f"`{prefix}picture add` — attach an image to start matching it.",
             f"`{prefix}picture remove <filename>` — stop matching that image.",
@@ -348,9 +349,9 @@ class StaffCog(commands.Cog):
             f"`{prefix}backup` — save pictures and ignore list (GitHub if configured).",
             f"`{prefix}restore` — pull that backup and put it back (`{prefix}pull` works too).",
             f"`{prefix}hostlink` — DMs you the hosting panel URL (set HOST_URL in .env).",
-            f"`{prefix}cleanup last <n>` — delete scam messages from the last n messages in every public channel.",
+            f"`{prefix}cleanup last <x>` — delete scam messages from the last x messages in every public channel.",
             f"`{prefix}cleanup since <YYYY-MM-DD>` — delete scam messages since that date in every public channel.",
-            f"`{prefix}cleanup here <n>` — delete scam messages from the last n messages in this channel only.",
+            f"`{prefix}cleanup here <x>` — delete scam messages from the last x messages in this channel only.",
         ]
         await ctx.send("\n".join(lines))
 
@@ -427,9 +428,9 @@ class StaffCog(commands.Cog):
         prefix = self.bot.prefix_value
         await ctx.send(
             f"Usage:\n"
-            f"`{prefix}cleanup last <n>` — scan the last n messages in every public channel.\n"
+            f"`{prefix}cleanup last <x>` — scan the last x messages in every public channel.\n"
             f"`{prefix}cleanup since <YYYY-MM-DD>` — scan all messages since that date.\n"
-            f"`{prefix}cleanup here <n>` — scan the last n messages in this channel only."
+            f"`{prefix}cleanup here <x>` — scan the last x messages in this channel only."
         )
 
     @cleanup.command(name="last")

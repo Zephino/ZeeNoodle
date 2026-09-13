@@ -107,6 +107,7 @@ class ZeeNoodle(commands.Bot):
             command_prefix=lambda bot, _message: bot.prefix_value,
             intents=intents,
             help_command=None,
+            case_insensitive=True,
         )
         seed_data_dir()
         self.detector = Detector(references_dir(), max_distance=HASH_DISTANCE)

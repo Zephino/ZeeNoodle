@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.28] — Sunday, September 13, 2026, 2:39 PM
+
+### Changed
+- Commands are now case-insensitive. `!Help`, `!HELP`, `!Cleanup Last 50` etc. all work.
+
+---
+
 ## [01.00.27] — Sunday, September 13, 2026, 2:35 PM
 
 ### Fixed

@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.26] — Sunday, September 13, 2026, 2:29 PM
+
+### Added
+- After an `!update` restart, the bot DMs the admin who triggered it once it is back online. The admin's user ID and new version are written to `.update_notify.json` before `os.execv` so the info survives the process replacement. `on_ready` reads and deletes the file, then sends the DM.
+
+---
+
 ## [01.00.25] — Sunday, September 13, 2026, 2:27 PM
 
 ### Changed

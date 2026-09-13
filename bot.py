@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import datetime
 import io
+import json
 import os
 import random
 import subprocess
@@ -49,6 +50,8 @@ UPDATE_FILES = (
     "VERSION",
     ".env.example",
 )
+# Written before os.execv so on_ready can DM the admin after the restart.
+_UPDATE_NOTIFY_PATH = PROJECT_ROOT / ".update_notify.json"
 INCIDENT_CHANNEL_ID = int(os.environ.get("INCIDENT_CHANNEL_ID", "1547016477104672798"))
 HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 
@@ -162,6 +165,18 @@ class ZeeNoodle(commands.Bot):
         print(f"Loaded {len(self.detector.references)} reference image hashes")
         if not self.detector.references:
             print("Warning: no images in references/. Image matching is off.")
+        # If this startup was triggered by !update, DM the admin who issued it.
+        if _UPDATE_NOTIFY_PATH.exists():
+            try:
+                info = json.loads(_UPDATE_NOTIFY_PATH.read_text(encoding="utf-8"))
+                admin = await self.fetch_user(int(info["admin_id"]))
+                await admin.send(
+                    f"ZeeNoodle is back online running **v{info['new_version']}**."
+                )
+            except Exception as exc:
+                print(f"[update] Could not send online DM: {exc}")
+            finally:
+                _UPDATE_NOTIFY_PATH.unlink(missing_ok=True)
 
     async def on_message(self, message: discord.Message) -> None:
         if self.user is None or message.author.id == self.user.id:
@@ -677,6 +692,11 @@ class StaffCog(commands.Cog):
                 )
             except discord.HTTPException:
                 pass
+        # Persist admin ID so on_ready can DM them when the bot is back online.
+        _UPDATE_NOTIFY_PATH.write_text(
+            json.dumps({"admin_id": ctx.author.id, "new_version": remote_ver}),
+            encoding="utf-8",
+        )
         await asyncio.sleep(3)
         self.bot._restart_pending = True
         await self.bot.close()

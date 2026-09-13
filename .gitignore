@@ -6,3 +6,4 @@ __pycache__/
 *.pyo
 .pytest_cache/
 dist/
+.update_notify.json

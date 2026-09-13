@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.27] — Sunday, September 13, 2026, 2:35 PM
+
+### Fixed
+- `SyntaxError` in `bot.py`: `push_backup` definition and its body were incorrectly joined onto one line by a previous edit. Split back onto separate lines.
+
+---
+
 ## [01.00.26] — Sunday, September 13, 2026, 2:29 PM
 
 ### Added

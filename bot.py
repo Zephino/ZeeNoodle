@@ -376,7 +376,8 @@ class ZeeNoodle(commands.Bot):
             changed.append(name)
         return changed, failed
 
-    async def push_backup(self, message: str) -> str | None:        if not self.session:
+    async def push_backup(self, message: str) -> str | None:
+        if not self.session:
             return "HTTP session is not ready."
         return await backup_after_change(self.session, message)
 

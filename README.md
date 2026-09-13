@@ -121,7 +121,7 @@ See `.env.example`. Typical keys:
 | `DATA_DIR` | Optional persistent folder on a host |
 | `GITHUB_REMOTE` | Your repo URL only |
 | `GITHUB_TOKEN` | Your personal access token only |
-| `GITHUB_BRANCH` | Default `main` |
+| `GITHUB_BRANCH` | Branch for backup data — use `data`, not `main` (default `data`) |
 | `HOST_URL` | Your hosting panel URL (sent via DM by `!hostlink`) |
 | `UPDATE_REPO` | Raw GitHub URL to pull updates from (default: official repo) |
 

@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.33] — Sunday, September 13, 2026, 3:03 PM
+
+### Changed
+- `GITHUB_BRANCH` default changed from `main` to `data` in `.env.example` and README. The backup branch must not be the same as the code branch or code pushes will overwrite saved pictures and the ignore list.
+
+---
+
 ## [01.00.32] — Sunday, September 13, 2026, 2:57 PM
 
 ### Changed

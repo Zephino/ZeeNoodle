@@ -18,6 +18,7 @@ from paths import (
     backup_dir,
     backup_ignore_file,
     backup_references_dir,
+    data_root,
     ignore_file,
     references_dir,
 )

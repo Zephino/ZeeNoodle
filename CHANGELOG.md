@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.30] — Sunday, September 13, 2026, 2:49 PM
+
+### Fixed
+- `data_root` was missing from the `paths` import in `github_backup.py`, causing a `NameError` on any backup command.
+
+---
+
 ## [01.00.29] — Sunday, September 13, 2026, 2:45 PM
 
 ### Fixed

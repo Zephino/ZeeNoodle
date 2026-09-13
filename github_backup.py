@@ -172,7 +172,9 @@ def commit_and_push(message: str) -> str | None:
         _ensure_git_repo(remote, branch)
         _git("add", "backup", "references", "config", ".gitignore")
         status = _git("status", "--porcelain")
-        if not status.stdout.strip():
+        # Lines starting with '??' are untracked — not staged, cannot be committed.
+        staged = [l for l in status.stdout.splitlines() if not l.startswith("??")]
+        if not staged:
             return None
         _git(
             "-c",

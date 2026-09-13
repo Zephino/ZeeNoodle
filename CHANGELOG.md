@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.31] — Sunday, September 13, 2026, 2:56 PM
+
+### Fixed
+- `commit_and_push` was treating untracked code files (shown as `?? filename` in `git status --porcelain`) as staged changes. This caused `git commit` to run and fail with "nothing added to commit" whenever the hosted container had code files sitting next to the git repo. The check now filters out `??` lines so only genuinely staged changes trigger a commit.
+
+---
+
 ## [01.00.30] — Sunday, September 13, 2026, 2:49 PM
 
 ### Fixed

@@ -6,6 +6,36 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.18] — Sunday, September 13, 2026, 9:58 AM
+
+### Removed
+- Burst-grouping logic. Every detected scam message now posts its own incident in `#bot-incendents` immediately. Previously, multiple incidents from the same user within 30 seconds were silently merged into one edited post, making it look like nothing was being reported.
+
+---
+
+## [01.00.17] — Sunday, September 13, 2026, 9:57 AM
+
+### Fixed
+- GitHub backup now uses `git push --force` so the Waifly instance is always the source of truth. Previously the push was rejected if the remote had commits the hosted bot did not have locally.
+
+---
+
+## [01.00.16] — Sunday, September 13, 2026, 9:43 AM
+
+### Added
+- `!hostlink` command (admin-only). DMs the hosting panel URL to the admin who runs the command. URL is read from `HOST_URL` in `.env` so it is never visible in a public channel.
+- `HOST_URL` key added to `.env.example`, the README env table, and `deploy.py` `ENV_KEYS` so the update walkthrough lists it.
+- "Quick links" section near the top of README with direct links to Quaxly and Waifly homepages.
+
+---
+
+## [01.00.15] — Sunday, September 13, 2026, 9:37 AM
+
+### Changed
+- `picture add` no longer uses the Discord attachment filename. The bot now saves each image with an auto-generated timestamped name (e.g. `ref_20260913_093700.png`) and detects the format from the image content itself. This prevents name collisions and removes the dependency on whatever name Discord assigns to a pasted image.
+
+---
+
 ## [01.00.14] — Tuesday, September 8, 2026, 9:12 PM
 
 ### Changed

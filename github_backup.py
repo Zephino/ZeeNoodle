@@ -148,7 +148,7 @@ def _ensure_git_repo(remote: str, branch: str) -> None:
 def _push_with_token(token: str, owner: str, repo: str, branch: str) -> None:
     encoded = quote(token, safe="")
     push_url = f"https://x-access-token:{encoded}@github.com/{owner}/{repo}.git"
-    _git("push", "-u", push_url, f"HEAD:{branch}")
+    _git("push", "--force", "-u", push_url, f"HEAD:{branch}")
 
 
 def commit_and_push(message: str) -> str | None:

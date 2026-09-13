@@ -2,6 +2,11 @@
 
 ZeeNoodle is a Discord bot for a 3D printing community. It deletes lacewin-style crypto casino scam images and matching text, then logs the incident in `#bot-incendents`.
 
+## Quick links
+
+- [Quaxly](https://quaxly.com/) — primary hosting
+- [Waifly](https://waifly.com/) — fallback hosting
+
 It does **not** treat normal print photos, slicer screenshots, or real filament giveaways as spam.
 
 Current version is in `VERSION` (`xx.xx.xx`).
@@ -57,6 +62,7 @@ Administrators only:
 - `!zeenoodletrigger ?` — change the prefix
 - `!backup` — save pictures and ignore list (GitHub if you configured **your** remote)
 - `!restore` or `!pull` — restore from that backup
+- `!hostlink` — DMs you the hosting panel URL (set `HOST_URL` in `.env`)
 
 ## Hosting on Quaxly
 
@@ -100,6 +106,7 @@ See `.env.example`. Typical keys:
 | `GITHUB_REMOTE` | Your repo URL only |
 | `GITHUB_TOKEN` | Your personal access token only |
 | `GITHUB_BRANCH` | Default `main` |
+| `HOST_URL` | Your hosting panel URL (sent via DM by `!hostlink`) |
 
 ## Self-host
 

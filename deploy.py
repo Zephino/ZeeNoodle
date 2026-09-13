@@ -42,6 +42,7 @@ ENV_KEYS = (
     "GITHUB_REMOTE",
     "GITHUB_TOKEN",
     "GITHUB_BRANCH",
+    "HOST_URL",
 )
 
 

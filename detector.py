@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import datetime
 import io
 import re
 from dataclasses import dataclass
@@ -84,20 +85,28 @@ class Detector:
             with Image.open(path) as img:
                 self.references.append((path.name, imagehash.phash(img.convert("RGB"))))
 
-    def add_image(self, name: str, data: bytes) -> str:
+    def add_image(self, data: bytes) -> str:
+        """Save *data* as a new reference image with an auto-generated name.
+
+        Returns the filename that was saved.  Raises ``ValueError`` if *data*
+        is not a readable image.
+        """
         self.references_dir.mkdir(parents=True, exist_ok=True)
-        filename = safe_image_name(name)
-        dest = self.references_dir / filename
-        if dest.exists():
-            stem, suffix = dest.stem, dest.suffix
-            index = 2
-            while dest.exists():
-                dest = self.references_dir / f"{stem}_{index}{suffix}"
-                index += 1
-            filename = dest.name
-        hashed = self.hash_bytes(data)
-        if hashed is None:
+        try:
+            with Image.open(io.BytesIO(data)) as img:
+                fmt = (img.format or "PNG").lower()
+        except OSError:
             raise ValueError("That file is not a readable image.")
+        if fmt == "jpeg":
+            fmt = "jpg"
+        stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+        filename = f"ref_{stamp}.{fmt}"
+        dest = self.references_dir / filename
+        index = 2
+        while dest.exists():
+            filename = f"ref_{stamp}_{index}.{fmt}"
+            dest = self.references_dir / filename
+            index += 1
         dest.write_bytes(data)
         self.reload()
         return filename

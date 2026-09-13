@@ -7,7 +7,6 @@ import io
 import os
 import random
 import time
-from dataclasses import dataclass, field
 from pathlib import Path
 
 import aiohttp
@@ -27,7 +26,6 @@ from ignore_list import IgnoreStore
 from paths import data_root, ignore_file, references_dir, seed_data_dir
 
 load_dotenv()
-BURST_SECONDS = 30
 INCIDENT_CHANNEL_ID = int(os.environ.get("INCIDENT_CHANNEL_ID", "1547016477104672798"))
 HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 
@@ -71,15 +69,6 @@ def _is_admin(member: discord.Member | discord.User) -> bool:
     return isinstance(member, discord.Member) and member.guild_permissions.administrator
 
 
-@dataclass
-class Burst:
-    at: float
-    count: int = 1
-    channel_ids: list[int] = field(default_factory=list)
-    channel_mentions: list[str] = field(default_factory=list)
-    reasons: list[str] = field(default_factory=list)
-    log_message: discord.Message | None = None
-
 
 class ZeeNoodle(commands.Bot):
     def __init__(self) -> None:
@@ -100,8 +89,6 @@ class ZeeNoodle(commands.Bot):
             always_ignore={INCIDENT_CHANNEL_ID},
         )
         self.session: aiohttp.ClientSession | None = None
-        self._bursts: dict[tuple[int, int], Burst] = {}
-        self._lock = asyncio.Lock()
 
     async def setup_hook(self) -> None:
         self.session = aiohttp.ClientSession()
@@ -226,42 +213,11 @@ class ZeeNoodle(commands.Bot):
         if not isinstance(channel, discord.TextChannel):
             print(f"Incident channel {INCIDENT_CHANNEL_ID} is missing or not a text channel.")
             return
-
-        reason = match.summary()
-        mention = message.channel.mention
-        now = time.monotonic()
         if message.guild is None:
             return
-        key = (message.guild.id, message.author.id)
-
-        async with self._lock:
-            burst = self._bursts.get(key)
-            if (
-                burst
-                and now - burst.at <= BURST_SECONDS
-                and burst.log_message is not None
-            ):
-                burst.at = now
-                burst.count += 1
-                if message.channel.id not in burst.channel_ids:
-                    burst.channel_ids.append(message.channel.id)
-                    burst.channel_mentions.append(mention)
-                if reason not in burst.reasons:
-                    burst.reasons.append(reason)
-                await self._edit_incident(burst, message, deleted)
-                return
-
-            log_message = await self._post_incident(
-                channel, message, reason, evidence, deleted, count=1, mentions=[mention]
-            )
-            self._bursts[key] = Burst(
-                at=now,
-                count=1,
-                channel_ids=[message.channel.id],
-                channel_mentions=[mention],
-                reasons=[reason],
-                log_message=log_message,
-            )
+        reason = match.summary()
+        mention = message.channel.mention
+        await self._post_incident(channel, message, reason, evidence, deleted)
 
     async def _post_incident(
         self,
@@ -270,36 +226,16 @@ class ZeeNoodle(commands.Bot):
         reason: str,
         evidence: list[tuple[str, bytes]],
         deleted: bool,
-        count: int,
-        mentions: list[str],
-    ) -> discord.Message | None:
-        embed = _incident_embed(message, reason, deleted, count, mentions)
+    ) -> None:
+        embed = _incident_embed(message, reason, deleted)
         files = []
         if evidence:
             name, data = evidence[0]
             files.append(discord.File(io.BytesIO(data), filename=name))
         try:
-            return await channel.send(embed=embed, files=files)
+            await channel.send(embed=embed, files=files)
         except discord.HTTPException as exc:
             print(f"Could not post incident: {exc}")
-            return None
-
-    async def _edit_incident(
-        self, burst: Burst, message: discord.Message, deleted: bool
-    ) -> None:
-        if burst.log_message is None:
-            return
-        embed = _incident_embed(
-            message,
-            "; ".join(burst.reasons),
-            deleted,
-            burst.count,
-            burst.channel_mentions,
-        )
-        try:
-            burst.log_message = await burst.log_message.edit(embed=embed)
-        except discord.HTTPException as exc:
-            print(f"Could not update incident: {exc}")
 
     async def push_backup(self, message: str) -> str | None:
         if not self.session:
@@ -335,6 +271,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}picture test` — attach an image to see if it would be deleted.",
             f"`{prefix}backup` — save pictures and ignore list (GitHub if configured).",
             f"`{prefix}restore` — pull that backup and put it back (`{prefix}pull` works too).",
+            f"`{prefix}hostlink` — DMs you the hosting panel URL (set HOST_URL in .env).",
         ]
         await ctx.send("\n".join(lines))
 
@@ -356,7 +293,7 @@ class StaffCog(commands.Cog):
         for attachment in images:
             data = await attachment.read()
             try:
-                filename = self.bot.detector.add_image(attachment.filename, data)
+                filename = self.bot.detector.add_image(data)
             except ValueError as exc:
                 await ctx.send(str(exc))
                 return
@@ -480,6 +417,18 @@ class StaffCog(commands.Cog):
             self.bot.ignore_store.load()
         await ctx.send(text)
 
+    @commands.command(name="hostlink")
+    async def hostlink_command(self, ctx: commands.Context) -> None:
+        """DM the admin the hosting panel URL stored in HOST_URL."""
+        url = os.environ.get("HOST_URL", "").strip()
+        if not url:
+            await ctx.author.send(
+                "HOST_URL is not set. Add `HOST_URL=<your panel URL>` to your .env file."
+            )
+        else:
+            await ctx.author.send(f"Hosting panel: {url}")
+        await ctx.send("Sent to your DMs.")
+
 
 def _embed_image_urls(message: discord.Message) -> list[str]:
     urls: list[str] = []
@@ -495,20 +444,15 @@ def _incident_embed(
     message: discord.Message,
     reason: str,
     deleted: bool,
-    count: int,
-    mentions: list[str],
 ) -> discord.Embed:
     action = "Deleted" if deleted else "Could not delete"
-    title = f"{action} scam message"
-    if count > 1:
-        title = f"{action} {count} scam messages"
-    embed = discord.Embed(title=title, color=discord.Color.red())
+    embed = discord.Embed(title=f"{action} scam message", color=discord.Color.red())
     embed.add_field(
         name="Who",
         value=f"{message.author.mention} (`{message.author.id}`)",
         inline=False,
     )
-    embed.add_field(name="Channels", value=", ".join(mentions), inline=False)
+    embed.add_field(name="Channel", value=message.channel.mention, inline=False)
     embed.add_field(
         name="When",
         value=f"<t:{int(message.created_at.timestamp())}:F>",

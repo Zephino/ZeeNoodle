@@ -341,20 +341,25 @@ class ZeeNoodle(commands.Bot):
         data = await self._download(f"{UPDATE_REPO}/VERSION")
         return data.decode("utf-8").strip() if data else None
 
-    async def _apply_update(self) -> int:
-        """Download every file in UPDATE_FILES from the remote and write to PROJECT_ROOT.
+    async def _apply_update(self) -> tuple[list[str], list[str]]:
+        """Download UPDATE_FILES, compare to local, write only changed files.
 
-        Returns the number of files successfully written.
+        Returns ``(changed, failed)`` — lists of filenames.
         """
-        written = 0
+        changed: list[str] = []
+        failed: list[str] = []
         for name in UPDATE_FILES:
             data = await self._download(f"{UPDATE_REPO}/{name}")
             if data is None:
                 print(f"[update] Could not fetch {name} — skipped.")
+                failed.append(name)
                 continue
-            (PROJECT_ROOT / name).write_bytes(data)
-            written += 1
-        return written
+            local_path = PROJECT_ROOT / name
+            if local_path.exists() and local_path.read_bytes() == data:
+                continue  # identical, no write needed
+            local_path.write_bytes(data)
+            changed.append(name)
+        return changed, failed
 
     async def push_backup(self, message: str) -> str | None:        if not self.session:
             return "HTTP session is not ready."
@@ -632,7 +637,20 @@ class StaffCog(commands.Cog):
         await status.edit(
             content=f"Update found: v{BOT_VERSION} → v{remote_ver}. Downloading files..."
         )
-        written = await self.bot._apply_update()
+        changed, failed = await self.bot._apply_update()
+        # DM the issuing admin a breakdown of what changed.
+        dm_lines = [f"**ZeeNoodle update: v{BOT_VERSION} → v{remote_ver}**"]
+        if changed:
+            dm_lines.append("\n**Files updated:**")
+            dm_lines.extend(f"- `{f}`" for f in changed)
+        else:
+            dm_lines.append("\nNo files differed from the local copy.")
+        if failed:
+            dm_lines.append(f"\n**Could not fetch:** {', '.join(f'`{f}`' for f in failed)}")
+        try:
+            await ctx.author.send("\n".join(dm_lines))
+        except discord.HTTPException:
+            pass  # DMs disabled — not fatal
         # Re-install packages in a thread so the event loop stays alive.
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
@@ -646,10 +664,7 @@ class StaffCog(commands.Cog):
             ),
         )
         await status.edit(
-            content=(
-                f"Updated {written} file(s) to v{remote_ver}. "
-                "Restarting in 3 seconds..."
-            )
+            content=f"Updated to v{remote_ver}. Restarting in 3 seconds..."
         )
         await asyncio.sleep(3)
         self.bot._restart_pending = True

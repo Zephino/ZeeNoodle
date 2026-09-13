@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.24] — Sunday, September 13, 2026, 2:25 PM
+
+### Changed
+- `!update` now compares each remote file to the local copy before writing, so only genuinely changed files are touched. The admin who ran the command receives a DM listing exactly which files were updated and any that could not be fetched.
+
+---
+
 ## [01.00.23] — Sunday, September 13, 2026, 2:21 PM
 
 ### Added

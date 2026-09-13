@@ -6,6 +6,14 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.23] — Sunday, September 13, 2026, 2:21 PM
+
+### Added
+- `!update` command (admin-only). Fetches the remote `VERSION`, compares it to the running version, and if newer: downloads all code files from `UPDATE_REPO`, runs `pip install -r requirements.txt`, then restarts the process automatically via `os.execv`. Admins no longer need to touch the hosting panel to apply updates.
+- `UPDATE_REPO` env key (optional). Defaults to the official raw GitHub URL. Set it to a fork's raw URL to pull updates from a different repo.
+
+---
+
 ## [01.00.22] — Sunday, September 13, 2026, 2:16 PM
 
 ### Changed

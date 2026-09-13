@@ -78,6 +78,7 @@ Administrators only:
 - `!backup` — save pictures and ignore list (GitHub if you configured **your** remote)
 - `!restore` or `!pull` — restore from that backup
 - `!hostlink` — DMs you the hosting panel URL (set `HOST_URL` in `.env`)
+- `!update` — check GitHub for a newer version and apply it; restarts automatically
 
 ## Hosting on Quaxly
 
@@ -122,6 +123,7 @@ See `.env.example`. Typical keys:
 | `GITHUB_TOKEN` | Your personal access token only |
 | `GITHUB_BRANCH` | Default `main` |
 | `HOST_URL` | Your hosting panel URL (sent via DM by `!hostlink`) |
+| `UPDATE_REPO` | Raw GitHub URL to pull updates from (default: official repo) |
 
 ## Self-host
 

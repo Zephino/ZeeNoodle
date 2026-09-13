@@ -7,6 +7,8 @@ import datetime
 import io
 import os
 import random
+import subprocess
+import sys
 import time
 from pathlib import Path
 
@@ -28,6 +30,25 @@ from paths import PROJECT_ROOT, data_root, ignore_file, references_dir, seed_dat
 
 load_dotenv()
 BOT_VERSION = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+UPDATE_REPO = os.environ.get(
+    "UPDATE_REPO",
+    "https://raw.githubusercontent.com/Zephino/ZeeNoodle/main",
+).rstrip("/")
+UPDATE_FILES = (
+    "bot.py",
+    "detector.py",
+    "envutil.py",
+    "github_backup.py",
+    "ignore_list.py",
+    "paths.py",
+    "setup.py",
+    "deploy.py",
+    "requirements.txt",
+    "Procfile",
+    "runtime.txt",
+    "VERSION",
+    ".env.example",
+)
 INCIDENT_CHANNEL_ID = int(os.environ.get("INCIDENT_CHANNEL_ID", "1547016477104672798"))
 HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 
@@ -91,6 +112,7 @@ class ZeeNoodle(commands.Bot):
             always_ignore={INCIDENT_CHANNEL_ID},
         )
         self.session: aiohttp.ClientSession | None = None
+        self._restart_pending: bool = False
 
     async def setup_hook(self) -> None:
         self.session = aiohttp.ClientSession()
@@ -314,8 +336,27 @@ class ZeeNoodle(commands.Bot):
 
         return total_deleted, channels_scanned
 
-    async def push_backup(self, message: str) -> str | None:
-        if not self.session:
+    async def _remote_version(self) -> str | None:
+        """Return the VERSION string from the remote update repo, or None on failure."""
+        data = await self._download(f"{UPDATE_REPO}/VERSION")
+        return data.decode("utf-8").strip() if data else None
+
+    async def _apply_update(self) -> int:
+        """Download every file in UPDATE_FILES from the remote and write to PROJECT_ROOT.
+
+        Returns the number of files successfully written.
+        """
+        written = 0
+        for name in UPDATE_FILES:
+            data = await self._download(f"{UPDATE_REPO}/{name}")
+            if data is None:
+                print(f"[update] Could not fetch {name} — skipped.")
+                continue
+            (PROJECT_ROOT / name).write_bytes(data)
+            written += 1
+        return written
+
+    async def push_backup(self, message: str) -> str | None:        if not self.session:
             return "HTTP session is not ready."
         return await backup_after_change(self.session, message)
 
@@ -352,6 +393,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}cleanup last <x>` — delete scam messages from the last x messages in every public channel.",
             f"`{prefix}cleanup since <YYYY-MM-DD>` — delete scam messages since that date in every public channel.",
             f"`{prefix}cleanup here <x>` — delete scam messages from the last x messages in this channel only.",
+            f"`{prefix}update` — check GitHub for a newer version and apply it (restarts automatically).",
         ]
         await ctx.send("\n".join(lines))
 
@@ -576,6 +618,43 @@ class StaffCog(commands.Cog):
             self.bot.ignore_store.load()
         await ctx.send(text)
 
+    @commands.command(name="update")
+    async def update_command(self, ctx: commands.Context) -> None:
+        """Check GitHub for a newer version and apply it, then restart."""
+        status = await ctx.send("Checking for updates...")
+        remote_ver = await self.bot._remote_version()
+        if remote_ver is None:
+            await status.edit(content="Could not reach GitHub to check for updates.")
+            return
+        if remote_ver <= BOT_VERSION:
+            await status.edit(content=f"Already up to date (v{BOT_VERSION}).")
+            return
+        await status.edit(
+            content=f"Update found: v{BOT_VERSION} → v{remote_ver}. Downloading files..."
+        )
+        written = await self.bot._apply_update()
+        # Re-install packages in a thread so the event loop stays alive.
+        loop = asyncio.get_event_loop()
+        await loop.run_in_executor(
+            None,
+            lambda: subprocess.run(
+                [
+                    sys.executable, "-m", "pip", "install",
+                    "-r", str(PROJECT_ROOT / "requirements.txt"), "-q",
+                ],
+                check=False,
+            ),
+        )
+        await status.edit(
+            content=(
+                f"Updated {written} file(s) to v{remote_ver}. "
+                "Restarting in 3 seconds..."
+            )
+        )
+        await asyncio.sleep(3)
+        self.bot._restart_pending = True
+        await self.bot.close()
+
     @commands.command(name="hostlink")
     async def hostlink_command(self, ctx: commands.Context) -> None:
         """DM the admin the hosting panel URL stored in HOST_URL."""
@@ -632,6 +711,9 @@ def main() -> None:
         print("Warning: references/ folder is missing.")
     bot = ZeeNoodle()
     bot.run(token)
+    if bot._restart_pending:
+        print("[update] Restarting with updated code...")
+        os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
 
 
 if __name__ == "__main__":

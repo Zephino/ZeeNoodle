@@ -53,13 +53,28 @@ Anyone:
 
 Administrators only:
 
+**Pictures**
+
 - `!picture add` — attach an image to start matching it
 - `!picture remove <filename>` — stop matching that image
 - `!picture list` — show reference images
+- `!picture test` — attach an image to see if it would be deleted (and which reference it matched)
+
+**Ignore list**
+
 - `!ignore add #channel` — stop scanning that channel
 - `!ignore remove #channel` — scan that channel again
 - `!ignore list` — show ignored channels
-- `!zeenoodletrigger ?` — change the prefix
+
+**Cleanup**
+
+- `!cleanup last <n>` — scan the last n messages in every public, non-ignored channel and delete any scam messages (max 10 000)
+- `!cleanup since <YYYY-MM-DD>` — same scan but starting from a specific date
+- `!cleanup here <n>` — same as `last` but scoped to the current channel only
+
+**Other**
+
+- `!zeenoodletrigger <new>` — change the command prefix
 - `!backup` — save pictures and ignore list (GitHub if you configured **your** remote)
 - `!restore` or `!pull` — restore from that backup
 - `!hostlink` — DMs you the hosting panel URL (set `HOST_URL` in `.env`)

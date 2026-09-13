@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.32] — Sunday, September 13, 2026, 2:57 PM
+
+### Changed
+- `!update` now restores pictures and config from your personal GitHub backup after applying the code update, before restarting. This ensures custom reference images survive on hosts where the data directory is not persistent.
+
+---
+
 ## [01.00.31] — Sunday, September 13, 2026, 2:56 PM
 
 ### Fixed

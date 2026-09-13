@@ -22,6 +22,7 @@ from detector import Detector, IMAGE_SUFFIXES, Match
 from envutil import ENV_PATH, set_env_value, validate_prefix
 from github_backup import (
     backup_after_change,
+    github_configured,
     mirror_backup,
     run_manual_backup,
     run_restore,
@@ -685,6 +686,12 @@ class StaffCog(commands.Cog):
             ),
         )
         await dm(f"Packages up to date. Restarting in 3 seconds...")
+        # If a personal backup is configured, restore pictures and config now
+        # so they survive the update on hosts where DATA_DIR is not persistent.
+        if github_configured():
+            await dm("Restoring pictures and config from your backup...")
+            restore_msg = await run_restore(self.bot.session)
+            await dm(f"Restore: {restore_msg}")
         # Post a single notice to #bot-incendents.
         incident = self.bot.get_channel(INCIDENT_CHANNEL_ID)
         if isinstance(incident, discord.TextChannel):

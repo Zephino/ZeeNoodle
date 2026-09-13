@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import datetime
 import io
 import os
 import random
@@ -237,6 +238,81 @@ class ZeeNoodle(commands.Bot):
         except discord.HTTPException as exc:
             print(f"Could not post incident: {exc}")
 
+    def _eligible_channels(self, guild: discord.Guild) -> list[discord.TextChannel]:
+        """Return public, non-ignored text channels the cleanup command may scan."""
+        everyone = guild.default_role
+        result = []
+        for channel in guild.text_channels:
+            if channel.id == INCIDENT_CHANNEL_ID:
+                continue
+            if self.ignore_store.is_ignored(channel.id):
+                continue
+            perms = channel.permissions_for(everyone)
+            if not perms.read_messages:
+                continue
+            result.append(channel)
+        return result
+
+    async def _cleanup_channels(
+        self,
+        channels: list[discord.TextChannel],
+        *,
+        limit: int | None,
+        after: datetime.datetime | None,
+    ) -> tuple[int, int]:
+        """Scan *channels* and delete scam messages.
+
+        Returns ``(messages_deleted, channels_scanned)``.
+        """
+        cutoff = discord.utils.utcnow() - datetime.timedelta(days=14)
+        bot_id = self.user.id if self.user else None
+        total_deleted = 0
+        channels_scanned = 0
+
+        for channel in channels:
+            to_delete: list[discord.Message] = []
+            try:
+                oldest_first = after is not None
+                async for msg in channel.history(
+                    limit=limit, after=after, oldest_first=oldest_first
+                ):
+                    if msg.author.id == bot_id:
+                        # Clean up the bot's own add/command replies.
+                        if msg.content.startswith(("Now matching:", "Sent to your DMs.")):
+                            to_delete.append(msg)
+                        continue
+                    _, match = await self._inspect(msg)
+                    if match.matched:
+                        to_delete.append(msg)
+            except discord.HTTPException as exc:
+                print(f"[cleanup] could not read #{channel.name}: {exc}")
+                continue
+
+            if to_delete:
+                recent = [m for m in to_delete if m.created_at >= cutoff]
+                old = [m for m in to_delete if m.created_at < cutoff]
+                # Bulk-delete messages under 14 days old (up to 100 at a time).
+                for i in range(0, len(recent), 100):
+                    batch = recent[i : i + 100]
+                    try:
+                        if len(batch) == 1:
+                            await batch[0].delete()
+                        else:
+                            await channel.delete_messages(batch)
+                    except discord.HTTPException as exc:
+                        print(f"[cleanup] bulk delete failed in #{channel.name}: {exc}")
+                # Delete older messages one by one.
+                for msg in old:
+                    try:
+                        await msg.delete()
+                    except discord.HTTPException as exc:
+                        print(f"[cleanup] single delete failed: {exc}")
+                total_deleted += len(to_delete)
+
+            channels_scanned += 1
+
+        return total_deleted, channels_scanned
+
     async def push_backup(self, message: str) -> str | None:
         if not self.session:
             return "HTTP session is not ready."
@@ -272,6 +348,9 @@ class StaffCog(commands.Cog):
             f"`{prefix}backup` — save pictures and ignore list (GitHub if configured).",
             f"`{prefix}restore` — pull that backup and put it back (`{prefix}pull` works too).",
             f"`{prefix}hostlink` — DMs you the hosting panel URL (set HOST_URL in .env).",
+            f"`{prefix}cleanup last <n>` — delete scam messages from the last n messages in every public channel.",
+            f"`{prefix}cleanup since <YYYY-MM-DD>` — delete scam messages since that date in every public channel.",
+            f"`{prefix}cleanup here <n>` — delete scam messages from the last n messages in this channel only.",
         ]
         await ctx.send("\n".join(lines))
 
@@ -342,6 +421,85 @@ class StaffCog(commands.Cog):
             await ctx.send("No reference pictures yet.")
             return
         await ctx.send("Reference pictures:\n" + "\n".join(f"- `{name}`" for name in names))
+
+    @commands.group(name="cleanup", invoke_without_command=True)
+    async def cleanup(self, ctx: commands.Context) -> None:
+        prefix = self.bot.prefix_value
+        await ctx.send(
+            f"Usage:\n"
+            f"`{prefix}cleanup last <n>` — scan the last n messages in every public channel.\n"
+            f"`{prefix}cleanup since <YYYY-MM-DD>` — scan all messages since that date.\n"
+            f"`{prefix}cleanup here <n>` — scan the last n messages in this channel only."
+        )
+
+    @cleanup.command(name="last")
+    async def cleanup_last(self, ctx: commands.Context, count: int) -> None:
+        """Scan the last *count* messages in every eligible channel."""
+        if count < 1 or count > 10000:
+            await ctx.send("Count must be between 1 and 10 000.")
+            return
+        if ctx.guild is None:
+            return
+        try:
+            await ctx.message.delete()
+        except discord.HTTPException:
+            pass
+        channels = self.bot._eligible_channels(ctx.guild)
+        status = await ctx.send(
+            f"Scanning last {count} messages across {len(channels)} channel(s)..."
+        )
+        deleted, scanned = await self.bot._cleanup_channels(
+            channels, limit=count, after=None
+        )
+        await status.edit(
+            content=f"Done. Deleted {deleted} message(s) across {scanned} channel(s)."
+        )
+
+    @cleanup.command(name="since")
+    async def cleanup_since(self, ctx: commands.Context, date_str: str) -> None:
+        """Scan all messages since *date_str* (YYYY-MM-DD) in every eligible channel."""
+        try:
+            dt = datetime.datetime.strptime(date_str, "%Y-%m-%d").replace(
+                tzinfo=datetime.timezone.utc
+            )
+        except ValueError:
+            await ctx.send("Use the format `YYYY-MM-DD`, e.g. `2026-09-13`.")
+            return
+        if ctx.guild is None:
+            return
+        try:
+            await ctx.message.delete()
+        except discord.HTTPException:
+            pass
+        channels = self.bot._eligible_channels(ctx.guild)
+        status = await ctx.send(
+            f"Scanning messages since {date_str} across {len(channels)} channel(s)..."
+        )
+        deleted, scanned = await self.bot._cleanup_channels(
+            channels, limit=None, after=dt
+        )
+        await status.edit(
+            content=f"Done. Deleted {deleted} message(s) across {scanned} channel(s)."
+        )
+
+    @cleanup.command(name="here")
+    async def cleanup_here(self, ctx: commands.Context, count: int) -> None:
+        """Scan the last *count* messages in the current channel only."""
+        if count < 1 or count > 10000:
+            await ctx.send("Count must be between 1 and 10 000.")
+            return
+        if not isinstance(ctx.channel, discord.TextChannel):
+            await ctx.send("This command only works in a text channel.")
+            return
+        try:
+            await ctx.message.delete()
+        except discord.HTTPException:
+            pass
+        status = await ctx.send(f"Scanning last {count} messages in this channel...")
+        deleted, _ = await self.bot._cleanup_channels(
+            [ctx.channel], limit=count, after=None
+        )
+        await status.edit(content=f"Done. Deleted {deleted} message(s).")
 
     @commands.group(name="ignore", invoke_without_command=True)
     async def ignore(self, ctx: commands.Context) -> None:
@@ -420,6 +578,7 @@ class StaffCog(commands.Cog):
     @commands.command(name="hostlink")
     async def hostlink_command(self, ctx: commands.Context) -> None:
         """DM the admin the hosting panel URL stored in HOST_URL."""
+        load_dotenv(override=True)
         url = os.environ.get("HOST_URL", "").strip()
         if not url:
             await ctx.author.send(

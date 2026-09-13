@@ -6,6 +6,23 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.20] — Sunday, September 13, 2026, 10:20 AM
+
+### Fixed
+- `^hostlink` now calls `load_dotenv(override=True)` before reading `HOST_URL`, so changes to `.env` while the bot is running are picked up without a restart.
+
+---
+
+## [01.00.19] — Sunday, September 13, 2026, 10:15 AM
+
+### Added
+- `^cleanup last <n>` — scans the last n messages in every public, non-ignored channel and deletes any that match a reference image.
+- `^cleanup since <YYYY-MM-DD>` — same scan but bounded by a date instead of a message count.
+- `^cleanup here <n>` — same as `last` but scoped to the channel where the command is run.
+- All three variants: delete the command message immediately; skip the incident channel and any ignored channels; skip channels where `@everyone` cannot read; bulk-delete messages under 14 days old, single-delete older ones; also remove the bot's own "Now matching:" and "Sent to your DMs." replies found in history.
+
+---
+
 ## [01.00.18] — Sunday, September 13, 2026, 9:58 AM
 
 ### Removed

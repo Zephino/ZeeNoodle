@@ -6,6 +6,14 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.29] — Sunday, September 13, 2026, 2:45 PM
+
+### Fixed
+- GitHub backup now uses `data_root()` as the git working directory instead of `PROJECT_ROOT`. When `DATA_DIR` is set on a host, `backup/`, `references/`, and `config/` live inside `DATA_DIR`; the old code pointed git at the wrong location and the `git add` failed silently.
+- `commit_and_push` and `upload_via_contents_api` now return the real git or API error text instead of a generic message, so the bot message shows exactly what went wrong.
+
+---
+
 ## [01.00.28] — Sunday, September 13, 2026, 2:39 PM
 
 ### Changed

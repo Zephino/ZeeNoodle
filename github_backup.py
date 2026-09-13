@@ -77,7 +77,7 @@ def mirror_backup() -> None:
 def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["git", *args],
-        cwd=PROJECT_ROOT,
+        cwd=data_root(),
         check=check,
         capture_output=True,
         text=True,
@@ -135,9 +135,15 @@ async def ensure_github_repo(session: aiohttp.ClientSession) -> str | None:
 
 
 def _ensure_git_repo(remote: str, branch: str) -> None:
-    if not (PROJECT_ROOT / ".git").exists():
+    root = data_root()
+    if not (root / ".git").exists():
         _git("init")
         _git("checkout", "-B", branch)
+    # Keep a .gitignore in data_root so .env is never committed.
+    src = PROJECT_ROOT / ".gitignore"
+    dest = root / ".gitignore"
+    if src.exists() and (not dest.exists() or dest.read_bytes() != src.read_bytes()):
+        shutil.copy2(src, dest)
     current = _git("remote", check=False)
     if "origin" not in current.stdout:
         _git("remote", "add", "origin", remote)
@@ -180,7 +186,7 @@ def commit_and_push(message: str) -> str | None:
     except subprocess.CalledProcessError as exc:
         err = (exc.stderr or exc.stdout or str(exc)).strip()
         print(f"GitHub backup failed: {err}")
-        return "Could not commit or push the backup."
+        return err[:400] if err else "Git push failed with no output."
     return None
 
 
@@ -247,7 +253,7 @@ async def upload_via_contents_api(
             await _put_file(session, owner, repo, branch, headers, path, message)
     except (aiohttp.ClientError, RuntimeError, OSError) as exc:
         print(f"GitHub Contents API backup failed: {exc}")
-        return "Could not upload the backup through GitHub."
+        return str(exc)[:400]
     return None
 
 

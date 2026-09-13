@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.25] — Sunday, September 13, 2026, 2:27 PM
+
+### Changed
+- `!update` no longer posts anything in the channel it was run in. All progress and the changed-file list are DM'd to the issuing admin. On a successful update, a single line is posted to `#bot-incendents` naming the new version and who triggered it.
+
+---
+
 ## [01.00.24] — Sunday, September 13, 2026, 2:25 PM
 
 ### Changed

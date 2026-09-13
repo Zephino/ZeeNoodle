@@ -625,20 +625,25 @@ class StaffCog(commands.Cog):
 
     @commands.command(name="update")
     async def update_command(self, ctx: commands.Context) -> None:
-        """Check GitHub for a newer version and apply it, then restart."""
-        status = await ctx.send("Checking for updates...")
+        """Check GitHub for a newer version, DM all progress, post result to incident channel."""
+
+        async def dm(text: str) -> None:
+            try:
+                await ctx.author.send(text)
+            except discord.HTTPException:
+                pass
+
+        await dm("Checking for updates...")
         remote_ver = await self.bot._remote_version()
         if remote_ver is None:
-            await status.edit(content="Could not reach GitHub to check for updates.")
+            await dm("Could not reach GitHub to check for updates.")
             return
         if remote_ver <= BOT_VERSION:
-            await status.edit(content=f"Already up to date (v{BOT_VERSION}).")
+            await dm(f"Already up to date (v{BOT_VERSION}).")
             return
-        await status.edit(
-            content=f"Update found: v{BOT_VERSION} → v{remote_ver}. Downloading files..."
-        )
+        await dm(f"Update found: v{BOT_VERSION} → v{remote_ver}. Downloading files...")
         changed, failed = await self.bot._apply_update()
-        # DM the issuing admin a breakdown of what changed.
+        # DM the full breakdown.
         dm_lines = [f"**ZeeNoodle update: v{BOT_VERSION} → v{remote_ver}**"]
         if changed:
             dm_lines.append("\n**Files updated:**")
@@ -646,11 +651,10 @@ class StaffCog(commands.Cog):
         else:
             dm_lines.append("\nNo files differed from the local copy.")
         if failed:
-            dm_lines.append(f"\n**Could not fetch:** {', '.join(f'`{f}`' for f in failed)}")
-        try:
-            await ctx.author.send("\n".join(dm_lines))
-        except discord.HTTPException:
-            pass  # DMs disabled — not fatal
+            dm_lines.append(
+                "\n**Could not fetch:** " + ", ".join(f"`{f}`" for f in failed)
+            )
+        await dm("\n".join(dm_lines))
         # Re-install packages in a thread so the event loop stays alive.
         loop = asyncio.get_event_loop()
         await loop.run_in_executor(
@@ -663,9 +667,16 @@ class StaffCog(commands.Cog):
                 check=False,
             ),
         )
-        await status.edit(
-            content=f"Updated to v{remote_ver}. Restarting in 3 seconds..."
-        )
+        await dm(f"Packages up to date. Restarting in 3 seconds...")
+        # Post a single notice to #bot-incendents.
+        incident = self.bot.get_channel(INCIDENT_CHANNEL_ID)
+        if isinstance(incident, discord.TextChannel):
+            try:
+                await incident.send(
+                    f"ZeeNoodle updated to **v{remote_ver}** by {ctx.author.mention}."
+                )
+            except discord.HTTPException:
+                pass
         await asyncio.sleep(3)
         self.bot._restart_pending = True
         await self.bot.close()

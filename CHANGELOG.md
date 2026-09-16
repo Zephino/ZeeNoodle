@@ -6,6 +6,16 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.36] — Wednesday, September 16, 2026, 6:54 PM
+
+### Added
+- `^update manual` (admin-only). Deletes everything in the bot folder except `.env`, `references/`, and `config/ignored_channels.json`, DMs the wipe summary and upload steps, posts a stop notice to `#bot-incendents`, then stops the process so you can upload/extract a zip and click Start. Does not auto-restart — `bot.py` is gone until the zip is restored.
+
+### Changed
+- `^update` is now a command group so `^update` (auto) and `^update manual` both work. The “already up to date” DM shows local and remote versions.
+
+---
+
 ## [01.00.35] — Wednesday, September 16, 2026, 7:52 AM
 
 ### Fixed

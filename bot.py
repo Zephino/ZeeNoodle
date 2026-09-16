@@ -10,6 +10,7 @@ import json
 import os
 import random
 import re
+import shutil
 import subprocess
 import sys
 import time
@@ -528,6 +529,62 @@ class ZeeNoodle(commands.Bot):
 
         return total_deleted, channels_scanned
 
+    def _wipe_for_manual_update(self) -> tuple[list[str], list[tuple[str, str]]]:
+        """Delete project files except .env, references/, and the ignore list.
+
+        Returns ``(deleted_names, errors)``.
+        """
+        ignore_path = ignore_file().resolve()
+        refs_path = references_dir().resolve()
+        env_paths = {(PROJECT_ROOT / ".env").resolve(), ENV_PATH.resolve()}
+
+        deleted: list[str] = []
+        errors: list[tuple[str, str]] = []
+
+        def _delete_path(path: Path, label: str) -> None:
+            try:
+                if path.is_dir() and not path.is_symlink():
+                    shutil.rmtree(path)
+                    deleted.append(label.rstrip("/") + "/")
+                elif path.exists() or path.is_symlink():
+                    path.unlink()
+                    deleted.append(label)
+            except OSError as exc:
+                errors.append((label, str(exc)))
+
+        def _wipe_root(root: Path) -> None:
+            if not root.is_dir():
+                return
+            for entry in list(root.iterdir()):
+                resolved = entry.resolve()
+                label = entry.name
+                try:
+                    label = str(entry.relative_to(PROJECT_ROOT))
+                except ValueError:
+                    try:
+                        label = str(entry.relative_to(root))
+                    except ValueError:
+                        pass
+
+                if resolved in env_paths or entry.name == ".env":
+                    continue
+                if resolved == refs_path or entry.name == "references":
+                    continue
+                if entry.name == "config" and entry.is_dir():
+                    for child in list(entry.iterdir()):
+                        if child.resolve() == ignore_path:
+                            continue
+                        child_label = f"{label}/{child.name}"
+                        _delete_path(child, child_label)
+                    continue
+                _delete_path(entry, label)
+
+        _wipe_root(PROJECT_ROOT)
+        data = data_root()
+        if data.resolve() != PROJECT_ROOT.resolve():
+            _wipe_root(data)
+        return deleted, errors
+
     async def push_backup(self, message: str) -> str | None:
         if not self.session:
             return "HTTP session is not ready."
@@ -567,6 +624,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}cleanup since <YYYY-MM-DD>` — delete scam messages since that date in every public channel.",
             f"`{prefix}cleanup here <x>` — delete scam messages from the last x messages in this channel only.",
             f"`{prefix}update` — check GitHub for a newer version and apply it (restarts automatically).",
+            f"`{prefix}update manual` — wipe code files (keeps .env, references, ignore list), then stop for a zip upload.",
         ]
         await ctx.send("\n".join(lines))
 
@@ -791,8 +849,8 @@ class StaffCog(commands.Cog):
             self.bot.ignore_store.load()
         await ctx.send(text)
 
-    @commands.command(name="update")
-    async def update_command(self, ctx: commands.Context) -> None:
+    @commands.group(name="update", invoke_without_command=True)
+    async def update_group(self, ctx: commands.Context) -> None:
         """Check GitHub for a newer version, DM all progress, post result to incident channel."""
 
         async def dm(text: str) -> None:
@@ -807,7 +865,9 @@ class StaffCog(commands.Cog):
             await dm("Could not reach GitHub to check for updates.")
             return
         if remote_ver <= BOT_VERSION:
-            await dm(f"Already up to date (v{BOT_VERSION}).")
+            await dm(
+                f"Already up to date (local v{BOT_VERSION}, remote v{remote_ver})."
+            )
             return
         await dm(f"Update found: v{BOT_VERSION} → v{remote_ver}. Downloading files...")
         changed, failed = await self.bot._apply_update()
@@ -835,7 +895,7 @@ class StaffCog(commands.Cog):
                 check=False,
             ),
         )
-        await dm(f"Packages up to date. Restarting in 3 seconds...")
+        await dm("Packages up to date. Restarting in 3 seconds...")
         # If a personal backup is configured, restore pictures and config now
         # so they survive the update on hosts where DATA_DIR is not persistent.
         if github_configured():
@@ -858,6 +918,58 @@ class StaffCog(commands.Cog):
         )
         await asyncio.sleep(3)
         self.bot._restart_pending = True
+        await self.bot.close()
+
+    @update_group.command(name="manual")
+    async def update_manual(self, ctx: commands.Context) -> None:
+        """Wipe code files, keep .env / references / ignore list, then stop for zip upload."""
+
+        async def dm(text: str) -> None:
+            try:
+                await ctx.author.send(text)
+            except discord.HTTPException:
+                pass
+
+        await dm(
+            "Starting **manual update** wipe.\n"
+            "Keeping: `.env`, `references/`, and the ignore list.\n"
+            "Everything else in the bot folder will be deleted, then the bot will stop."
+        )
+        deleted, errors = await asyncio.get_event_loop().run_in_executor(
+            None, self.bot._wipe_for_manual_update
+        )
+        if deleted:
+            await dm(
+                "**Deleted:**\n" + "\n".join(f"- `{name}`" for name in deleted[:40])
+                + (f"\n- …and {len(deleted) - 40} more" if len(deleted) > 40 else "")
+            )
+        else:
+            await dm("Nothing needed deleting (or only keep-set items were present).")
+        if errors:
+            await dm(
+                "**Could not delete:**\n"
+                + "\n".join(f"- `{name}`: {err}" for name, err in errors[:20])
+            )
+        incident = self.bot.get_channel(INCIDENT_CHANNEL_ID)
+        if isinstance(incident, discord.TextChannel):
+            try:
+                await incident.send(
+                    f"ZeeNoodle stopped for **manual update** by {ctx.author.mention}. "
+                    "Upload/extract a new zip, then click Start."
+                )
+            except discord.HTTPException:
+                pass
+        await dm(
+            "Wipe done. Bot is stopping now.\n\n"
+            "**Next steps:**\n"
+            "1. Open the hosting Files tab.\n"
+            "2. Upload `zeenoodle-quaxly.zip`.\n"
+            "3. Unarchive/extract it over the folder.\n"
+            "4. Delete the zip.\n"
+            "5. Click **Start** on the Console tab.\n"
+            "6. Wait for `ZeeNoodle logged in as ...`"
+        )
+        await asyncio.sleep(2)
         await self.bot.close()
 
     @commands.command(name="hostlink")

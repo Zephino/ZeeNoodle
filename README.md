@@ -80,6 +80,7 @@ Administrators only:
 - `!restore` or `!pull` — restore from that backup
 - `!hostlink` — DMs you the hosting panel URL (set `HOST_URL` in `.env`)
 - `!update` — check GitHub for a newer version and apply it; restarts automatically
+- `!update manual` — wipe code files (keeps `.env`, `references/`, ignore list), stop the bot so you can upload/extract a zip and click Start
 
 ## Hosting on Quaxly
 

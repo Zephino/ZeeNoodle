@@ -373,16 +373,48 @@ class ZeeNoodle(commands.Bot):
             image_hits=tuple(image_hits), text_reasons=text_reasons
         )
 
-    async def _download(self, url: str) -> bytes | None:
+    async def _download(self, url: str, *, bust_cache: bool = False) -> bytes | None:
         if not self.session:
             return None
+        headers = {}
+        fetch_url = url
+        if bust_cache:
+            sep = "&" if "?" in url else "?"
+            fetch_url = f"{url}{sep}t={int(time.time())}"
+            headers["Cache-Control"] = "no-cache"
+            headers["Pragma"] = "no-cache"
         try:
-            async with self.session.get(url) as response:
+            async with self.session.get(fetch_url, headers=headers) as response:
                 if response.status != 200:
                     return None
                 return await response.read()
         except aiohttp.ClientError:
             return None
+
+    async def _remote_version(self) -> str | None:
+        """Return the VERSION string from the remote update repo, or None on failure."""
+        data = await self._download(f"{UPDATE_REPO}/VERSION", bust_cache=True)
+        return data.decode("utf-8").strip() if data else None
+
+    async def _apply_update(self) -> tuple[list[str], list[str]]:
+        """Download UPDATE_FILES, compare to local, write only changed files.
+
+        Returns ``(changed, failed)`` — lists of filenames.
+        """
+        changed: list[str] = []
+        failed: list[str] = []
+        for name in UPDATE_FILES:
+            data = await self._download(f"{UPDATE_REPO}/{name}", bust_cache=True)
+            if data is None:
+                print(f"[update] Could not fetch {name} — skipped.")
+                failed.append(name)
+                continue
+            local_path = PROJECT_ROOT / name
+            if local_path.exists() and local_path.read_bytes() == data:
+                continue  # identical, no write needed
+            local_path.write_bytes(data)
+            changed.append(name)
+        return changed, failed
 
     async def _report(
         self,
@@ -495,31 +527,6 @@ class ZeeNoodle(commands.Bot):
             channels_scanned += 1
 
         return total_deleted, channels_scanned
-
-    async def _remote_version(self) -> str | None:
-        """Return the VERSION string from the remote update repo, or None on failure."""
-        data = await self._download(f"{UPDATE_REPO}/VERSION")
-        return data.decode("utf-8").strip() if data else None
-
-    async def _apply_update(self) -> tuple[list[str], list[str]]:
-        """Download UPDATE_FILES, compare to local, write only changed files.
-
-        Returns ``(changed, failed)`` — lists of filenames.
-        """
-        changed: list[str] = []
-        failed: list[str] = []
-        for name in UPDATE_FILES:
-            data = await self._download(f"{UPDATE_REPO}/{name}")
-            if data is None:
-                print(f"[update] Could not fetch {name} — skipped.")
-                failed.append(name)
-                continue
-            local_path = PROJECT_ROOT / name
-            if local_path.exists() and local_path.read_bytes() == data:
-                continue  # identical, no write needed
-            local_path.write_bytes(data)
-            changed.append(name)
-        return changed, failed
 
     async def push_backup(self, message: str) -> str | None:
         if not self.session:

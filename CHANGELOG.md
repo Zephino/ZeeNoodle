@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.35] — Wednesday, September 16, 2026, 7:52 AM
+
+### Fixed
+- `!update` now fetches `VERSION` and code files with a cache-busting query string and `Cache-Control: no-cache` headers. GitHub's raw CDN was serving a stale `VERSION`, so the bot thought it was already current.
+
+---
+
 ## [01.00.34] — Wednesday, September 16, 2026, 7:48 AM
 
 ### Added

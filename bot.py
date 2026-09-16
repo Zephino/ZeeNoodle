@@ -4,13 +4,16 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import hashlib
 import io
 import json
 import os
 import random
+import re
 import subprocess
 import sys
 import time
+from dataclasses import dataclass, field
 from pathlib import Path
 
 import aiohttp
@@ -55,6 +58,9 @@ UPDATE_FILES = (
 _UPDATE_NOTIFY_PATH = PROJECT_ROOT / ".update_notify.json"
 INCIDENT_CHANNEL_ID = int(os.environ.get("INCIDENT_CHANNEL_ID", "1547016477104672798"))
 HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
+CROSSPOST_SECONDS = int(os.environ.get("CROSSPOST_SECONDS", "120"))
+_MIN_TEXT_FP_LEN = 20
+_WHITESPACE_RE = re.compile(r"\s+")
 
 
 def load_prefix() -> str:
@@ -96,6 +102,30 @@ def _is_admin(member: discord.Member | discord.User) -> bool:
     return isinstance(member, discord.Member) and member.guild_permissions.administrator
 
 
+def _text_fingerprint(text: str) -> str | None:
+    """Return a stable hash of normalized text, or None if too short to track."""
+    normalized = _WHITESPACE_RE.sub(" ", text.lower()).strip()
+    if len(normalized) < _MIN_TEXT_FP_LEN:
+        return None
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
+@dataclass
+class TrackedPost:
+    channel_id: int
+    channel_mention: str
+    message_id: int
+    jump_url: str
+    at: float
+
+
+@dataclass
+class CrossPostTrack:
+    posts: list[TrackedPost] = field(default_factory=list)
+
+    def channel_ids(self) -> set[int]:
+        return {post.channel_id for post in self.posts}
+
 
 class ZeeNoodle(commands.Bot):
     def __init__(self) -> None:
@@ -118,6 +148,8 @@ class ZeeNoodle(commands.Bot):
         )
         self.session: aiohttp.ClientSession | None = None
         self._restart_pending: bool = False
+        self._crossposts: dict[tuple[int, int, str], CrossPostTrack] = {}
+        self._crosspost_lock = asyncio.Lock()
 
     async def setup_hook(self) -> None:
         self.session = aiohttp.ClientSession()
@@ -194,20 +226,115 @@ class ZeeNoodle(commands.Bot):
         if self.ignore_store.is_ignored(message.channel.id):
             return
 
-        evidence, match = await self._inspect(message)
-        if not match.matched:
+        fingerprints, evidence, match = await self._analyze(message)
+        cross_channels: list[str] = []
+        tracked: list[TrackedPost] = []
+        if fingerprints:
+            tracked, cross_channels = await self._record_crosspost(
+                message, fingerprints
+            )
+
+        # Same content in 2+ channels: only act if spam filters match.
+        if len(cross_channels) >= 2:
+            if not match.matched:
+                return
+            deleted = await self._delete_tracked(tracked)
+            reason = f"{match.summary()}; cross-posted in {len(cross_channels)} channels"
+            await self._report(
+                message, reason, evidence, deleted, channel_mentions=cross_channels
+            )
+            await self._clear_crosspost(message, fingerprints)
             return
 
+        # Single-channel path: unchanged lacewin spam delete/report.
+        if not match.matched:
+            return
         try:
             await message.delete()
             deleted = True
         except discord.HTTPException as exc:
             deleted = False
             print(f"Could not delete message {message.id}: {exc}")
+        await self._report(message, match.summary(), evidence, deleted)
 
-        await self._report(message, match, evidence, deleted)
+    def _prune_crossposts(self, now: float) -> None:
+        expired = [
+            key
+            for key, track in self._crossposts.items()
+            if not track.posts or now - track.posts[-1].at > CROSSPOST_SECONDS
+        ]
+        for key in expired:
+            del self._crossposts[key]
 
-    async def _inspect(self, message: discord.Message) -> tuple[list[tuple[str, bytes]], Match]:
+    async def _record_crosspost(
+        self, message: discord.Message, fingerprints: list[str]
+    ) -> tuple[list[TrackedPost], list[str]]:
+        """Record this message under each fingerprint. Return merged posts and channel mentions."""
+        assert message.guild is not None
+        now = time.monotonic()
+        post = TrackedPost(
+            channel_id=message.channel.id,
+            channel_mention=message.channel.mention,
+            message_id=message.id,
+            jump_url=message.jump_url,
+            at=now,
+        )
+        merged: dict[int, TrackedPost] = {}
+        async with self._crosspost_lock:
+            self._prune_crossposts(now)
+            for fingerprint in fingerprints:
+                key = (message.guild.id, message.author.id, fingerprint)
+                track = self._crossposts.setdefault(key, CrossPostTrack())
+                # Drop posts outside the window for this key.
+                track.posts = [
+                    item
+                    for item in track.posts
+                    if now - item.at <= CROSSPOST_SECONDS
+                ]
+                if not any(item.message_id == post.message_id for item in track.posts):
+                    track.posts.append(post)
+                for item in track.posts:
+                    merged[item.message_id] = item
+        posts = list(merged.values())
+        # Preserve first-seen channel order.
+        channel_mentions: list[str] = []
+        seen_channels: set[int] = set()
+        for item in posts:
+            if item.channel_id not in seen_channels:
+                seen_channels.add(item.channel_id)
+                channel_mentions.append(item.channel_mention)
+        return posts, channel_mentions
+
+    async def _clear_crosspost(
+        self, message: discord.Message, fingerprints: list[str]
+    ) -> None:
+        if message.guild is None:
+            return
+        async with self._crosspost_lock:
+            for fingerprint in fingerprints:
+                key = (message.guild.id, message.author.id, fingerprint)
+                self._crossposts.pop(key, None)
+
+    async def _delete_tracked(self, tracked: list[TrackedPost]) -> bool:
+        """Delete every tracked message still present. Returns True if any delete succeeded."""
+        any_deleted = False
+        for post in tracked:
+            channel = self.get_channel(post.channel_id)
+            if not isinstance(channel, discord.TextChannel):
+                continue
+            try:
+                msg = await channel.fetch_message(post.message_id)
+                await msg.delete()
+                any_deleted = True
+            except discord.HTTPException as exc:
+                print(f"Could not delete cross-posted message {post.message_id}: {exc}")
+        return any_deleted
+
+    async def _analyze(
+        self, message: discord.Message
+    ) -> tuple[list[str], list[tuple[str, bytes]], Match]:
+        """Download content once: build fingerprints (pixel/text) and run spam filters."""
+        fingerprints: list[str] = []
         evidence: list[tuple[str, bytes]] = []
         image_hits = []
         for attachment in message.attachments:
@@ -217,6 +344,9 @@ class ZeeNoodle(commands.Bot):
                 data = await attachment.read()
             except discord.HTTPException:
                 continue
+            hashed = self.detector.hash_bytes(data)
+            if hashed is not None:
+                fingerprints.append(f"img:{hashed}")
             hits = self.detector.match_image(data)
             if hits:
                 image_hits.extend(hits)
@@ -225,12 +355,23 @@ class ZeeNoodle(commands.Bot):
             data = await self._download(url)
             if not data:
                 continue
+            hashed = self.detector.hash_bytes(data)
+            if hashed is not None:
+                fingerprints.append(f"img:{hashed}")
             hits = self.detector.match_image(data)
             if hits:
                 image_hits.extend(hits)
                 evidence.append(("embed.png", data))
-        text_reasons = self.detector.match_text(_message_text(message))
-        return evidence, Match(image_hits=tuple(image_hits), text_reasons=text_reasons)
+        text = _message_text(message)
+        text_fp = _text_fingerprint(text)
+        if text_fp:
+            fingerprints.append(f"text:{text_fp}")
+        text_reasons = self.detector.match_text(text)
+        # Deduplicate fingerprints while keeping order.
+        unique_fps = list(dict.fromkeys(fingerprints))
+        return unique_fps, evidence, Match(
+            image_hits=tuple(image_hits), text_reasons=text_reasons
+        )
 
     async def _download(self, url: str) -> bytes | None:
         if not self.session:
@@ -246,9 +387,10 @@ class ZeeNoodle(commands.Bot):
     async def _report(
         self,
         message: discord.Message,
-        match: Match,
+        reason: str,
         evidence: list[tuple[str, bytes]],
         deleted: bool,
+        channel_mentions: list[str] | None = None,
     ) -> None:
         channel = self.get_channel(INCIDENT_CHANNEL_ID)
         if not isinstance(channel, discord.TextChannel):
@@ -256,9 +398,9 @@ class ZeeNoodle(commands.Bot):
             return
         if message.guild is None:
             return
-        reason = match.summary()
-        mention = message.channel.mention
-        await self._post_incident(channel, message, reason, evidence, deleted)
+        await self._post_incident(
+            channel, message, reason, evidence, deleted, channel_mentions
+        )
 
     async def _post_incident(
         self,
@@ -267,8 +409,9 @@ class ZeeNoodle(commands.Bot):
         reason: str,
         evidence: list[tuple[str, bytes]],
         deleted: bool,
+        channel_mentions: list[str] | None = None,
     ) -> None:
-        embed = _incident_embed(message, reason, deleted)
+        embed = _incident_embed(message, reason, deleted, channel_mentions)
         files = []
         if evidence:
             name, data = evidence[0]
@@ -321,7 +464,7 @@ class ZeeNoodle(commands.Bot):
                         if msg.content.startswith(("Now matching:", "Sent to your DMs.")):
                             to_delete.append(msg)
                         continue
-                    _, match = await self._inspect(msg)
+                    _, _, match = await self._analyze(msg)
                     if match.matched:
                         to_delete.append(msg)
             except discord.HTTPException as exc:
@@ -738,15 +881,26 @@ def _incident_embed(
     message: discord.Message,
     reason: str,
     deleted: bool,
+    channel_mentions: list[str] | None = None,
 ) -> discord.Embed:
     action = "Deleted" if deleted else "Could not delete"
-    embed = discord.Embed(title=f"{action} scam message", color=discord.Color.red())
+    title = f"{action} scam message"
+    if channel_mentions and len(channel_mentions) > 1:
+        title = f"{action} scam messages"
+    embed = discord.Embed(title=title, color=discord.Color.red())
     embed.add_field(
         name="Who",
         value=f"{message.author.mention} (`{message.author.id}`)",
         inline=False,
     )
-    embed.add_field(name="Channel", value=message.channel.mention, inline=False)
+    if channel_mentions and len(channel_mentions) > 1:
+        embed.add_field(
+            name="Channels",
+            value=", ".join(channel_mentions),
+            inline=False,
+        )
+    else:
+        embed.add_field(name="Channel", value=message.channel.mention, inline=False)
     embed.add_field(
         name="When",
         value=f"<t:{int(message.created_at.timestamp())}:F>",

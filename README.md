@@ -13,9 +13,10 @@ Current version is in `VERSION` (`xx.xx.xx`).
 
 ## What it matches
 
-- Pictures close to the files in `references/` (perceptual hash)
+- Pictures close to the files in `references/` (perceptual hash of **image pixels**, not the filename)
 - Narrow text such as `lacewin.com` or crypto-casino bonus wording
 - Not generic words like `giveaway` or “this print is EPIC”
+- Same image or text posted by one user in **2+ channels** within `CROSSPOST_SECONDS` (default 120): run the spam filters; if they match, delete the copies and log every channel hit
 
 `#bot-incendents` is always ignored. You can ignore more channels with commands.
 
@@ -118,6 +119,7 @@ See `.env.example`. Typical keys:
 | `INCIDENT_CHANNEL_ID` | Staff log channel |
 | `COMMAND_PREFIX` | Command trigger (not `/`) |
 | `HASH_DISTANCE` | Image match tightness (default `10`) |
+| `CROSSPOST_SECONDS` | Window for same-content multi-channel spam checks (default `120`) |
 | `DATA_DIR` | Optional persistent folder on a host |
 | `GITHUB_REMOTE` | Your repo URL only |
 | `GITHUB_TOKEN` | Your personal access token only |

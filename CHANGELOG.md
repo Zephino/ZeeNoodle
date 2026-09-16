@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.34] — Wednesday, September 16, 2026, 7:48 AM
+
+### Added
+- Cross-channel spam check. Tracks image pixel hashes and normalized text fingerprints per author. When the same content appears in 2+ channels within `CROSSPOST_SECONDS` (default 120), the existing spam filters run; on a match, all tracked copies are deleted and `#bot-incendents` lists every channel hit with a `cross-posted` reason. Filenames are never used for matching.
+
+---
+
 ## [01.00.33] — Sunday, September 13, 2026, 3:03 PM
 
 ### Changed

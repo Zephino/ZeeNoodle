@@ -85,6 +85,7 @@ Administrators only:
 - `!stats` — DM you delete stats for all users (text + private HTML file)
 - `!stats @user` — DM you delete stats for one user (text + private HTML file)
 - `!notify on` / `!notify off` — opt in/out of DMs whenever a scam message is deleted (persists across restarts)
+- `!kicklist clear @user` — remove a user from the auto-kick list once (tracked; spam again restarts the cycle)
 
 ## Hosting on Quaxly
 

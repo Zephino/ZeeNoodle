@@ -6,6 +6,14 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.38] — Tuesday, September 29, 2026, 10:27 AM
+
+### Added
+- `^kicklist clear @user` — admins can clear someone from the auto-kick / warn cycle once. The clear is recorded in `stats.db` (`kick_pardons`); if they spam again, the full warn → 5‑min → 1‑hour kick cycle starts over and they need another clear.
+- Warning DM now tells the user an admin can remove them from the kick list, but they have to ask. `^stats @user` also shows how many times they were cleared.
+
+---
+
 ## [01.00.37] — Tuesday, September 29, 2026, 10:21 AM
 
 ### Added

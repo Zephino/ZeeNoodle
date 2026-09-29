@@ -69,7 +69,8 @@ _MIN_TEXT_FP_LEN = 20
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPAM_WARN_TEXT = (
     "Your messages that matched ZeeNoodle's scam/spam filters were removed. "
-    "If you continue posting this content, you will be removed from the Discord server."
+    "If you continue posting this content, you will be removed from the Discord server. "
+    "An admin can remove you from the automatic kick list, but you have to ask them."
 )
 
 
@@ -819,6 +820,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}stats @user` — DM you delete stats for one user (with an HTML report).",
             f"`{prefix}notify on` — DM you whenever a scam message is deleted.",
             f"`{prefix}notify off` — stop those delete DMs.",
+            f"`{prefix}kicklist clear @user` — remove a user from the auto-kick list (once).",
         ]
         await ctx.send("\n".join(lines))
 
@@ -1073,6 +1075,7 @@ class StaffCog(commands.Cog):
             lines = [
                 f"**ZeeNoodle delete stats** for {member.mention} (`{member.id}`)",
                 f"Total deletes: **{count}**",
+                f"Kick-list clears by admins: **{self.bot.stats.pardon_count(ctx.guild.id, member.id)}**",
                 "",
             ]
             for row in detail[:25]:
@@ -1113,6 +1116,45 @@ class StaffCog(commands.Cog):
     async def notify_off(self, ctx: commands.Context) -> None:
         self.bot.stats.set_notify(ctx.author.id, False)
         await ctx.send("Delete notification DMs are off for you.")
+
+    @commands.group(name="kicklist", invoke_without_command=True)
+    async def kicklist_group(self, ctx: commands.Context) -> None:
+        prefix = self.bot.prefix_value
+        await ctx.send(
+            f"Use `{prefix}kicklist clear @user` to remove someone from the "
+            "auto-kick list once. If they spam again, the warn/kick cycle starts over."
+        )
+
+    @kicklist_group.command(name="clear")
+    async def kicklist_clear(self, ctx: commands.Context, member: discord.Member) -> None:
+        """Clear warn/kick-window state for a user and record an admin pardon."""
+        if ctx.guild is None:
+            return
+        key = (ctx.guild.id, member.id)
+        for bag in (self.bot._warn_tasks, self.bot._arm_tasks):
+            task = bag.pop(key, None)
+            if task and not task.done():
+                task.cancel()
+        was_listed = self.bot.stats.is_on_kick_list(ctx.guild.id, member.id)
+        count = self.bot.stats.record_pardon(ctx.guild.id, member.id)
+        if was_listed:
+            text = (
+                f"Cleared {member.mention} from the auto-kick list. "
+                f"Admin clears for this user: **{count}**."
+            )
+        else:
+            text = (
+                f"{member.mention} was not on the active kick list. "
+                f"Recorded the clear anyway — admin clears for this user: **{count}**."
+            )
+        await ctx.send(text)
+        try:
+            await member.send(
+                "An admin removed you from ZeeNoodle's automatic kick list. "
+                "If you post scam/spam content again, you can be warned and kicked again."
+            )
+        except discord.HTTPException:
+            pass
 
     @commands.command(name="backup")
     async def backup_command(self, ctx: commands.Context) -> None:

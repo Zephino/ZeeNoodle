@@ -48,6 +48,13 @@ class StatsStore:
                     kick_expires_at TEXT,
                     PRIMARY KEY (guild_id, user_id)
                 );
+                CREATE TABLE IF NOT EXISTS kick_pardons (
+                    guild_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    pardon_count INTEGER NOT NULL DEFAULT 0,
+                    last_pardoned_at TEXT,
+                    PRIMARY KEY (guild_id, user_id)
+                );
                 """
             )
 
@@ -197,6 +204,55 @@ class StatsStore:
                 (guild_id, user_id),
             )
 
+    def record_pardon(self, guild_id: int, user_id: int) -> int:
+        """Clear kick-list state and increment pardon count. Returns new count."""
+        stamp = _utc_now()
+        with self._connect() as conn:
+            conn.execute(
+                "DELETE FROM enforcement WHERE guild_id = ? AND user_id = ?",
+                (guild_id, user_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO kick_pardons (
+                    guild_id, user_id, pardon_count, last_pardoned_at
+                )
+                VALUES (?, ?, 1, ?)
+                ON CONFLICT(guild_id, user_id) DO UPDATE SET
+                    pardon_count = pardon_count + 1,
+                    last_pardoned_at = excluded.last_pardoned_at
+                """,
+                (guild_id, user_id, stamp),
+            )
+            row = conn.execute(
+                """
+                SELECT pardon_count FROM kick_pardons
+                WHERE guild_id = ? AND user_id = ?
+                """,
+                (guild_id, user_id),
+            ).fetchone()
+            return int(row["pardon_count"]) if row else 1
+
+    def pardon_count(self, guild_id: int, user_id: int) -> int:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT pardon_count FROM kick_pardons
+                WHERE guild_id = ? AND user_id = ?
+                """,
+                (guild_id, user_id),
+            ).fetchone()
+            return int(row["pardon_count"]) if row else 0
+
+    def is_on_kick_list(self, guild_id: int, user_id: int) -> bool:
+        """True if warned and/or in an active (or pending) kick cycle."""
+        row = self.get_enforcement(guild_id, user_id)
+        if row is None:
+            return False
+        if row["warn_sent_at"] and not row["kick_armed_at"]:
+            return True  # warned, waiting to arm
+        return self.kick_window_active(guild_id, user_id)
+
     def kick_window_active(self, guild_id: int, user_id: int) -> bool:
         row = self.get_enforcement(guild_id, user_id)
         if row is None or not row["kick_expires_at"]:
@@ -240,6 +296,7 @@ class StatsStore:
         else:
             detail = self.deletions_for_user(guild_id, user_id)
             count = self.deletion_count(guild_id, user_id)
+            pardons = self.pardon_count(guild_id, user_id)
             title = f"ZeeNoodle stats — user {user_id}"
             body_rows = []
             for row in detail:
@@ -257,7 +314,11 @@ class StatsStore:
                 + ("".join(body_rows) or "<tr><td colspan='3'>No deletions for this user.</td></tr>")
                 + "</tbody></table>"
             )
-            summary = f"<p>Total deletes for this user: <strong>{count}</strong></p>"
+            summary = (
+                f"<p>Total deletes for this user: <strong>{count}</strong></p>"
+                f"<p>Times cleared from kick list by an admin: "
+                f"<strong>{pardons}</strong></p>"
+            )
 
         return f"""<!DOCTYPE html>
 <html lang="en">

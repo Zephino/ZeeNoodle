@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.47] — Tuesday, September 29, 2026, 10:46 AM
+
+### Changed
+- `.env.example` comments expanded so every key has a plain-language explanation of what it does and when to change it.
+
+---
+
 ## [01.00.46] — Tuesday, September 29, 2026, 10:45 AM
 
 ### Changed

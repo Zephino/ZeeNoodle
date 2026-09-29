@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.40] — Tuesday, September 29, 2026, 10:32 AM
+
+### Changed
+- Kick-list clear DM wording updated to match the clearer “pending removal / put back on the list” phrasing.
+
+---
+
 ## [01.00.39] — Tuesday, September 29, 2026, 10:29 AM
 
 ### Changed

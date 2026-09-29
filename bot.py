@@ -78,9 +78,8 @@ _SPAM_WARN_TEXT = (
 _SPAM_CLEAR_TEXT = (
     "Hello — a server administrator has cleared you from ZeeNoodle's automatic "
     "kick list.\n\n"
-    "You are no longer subject to that pending removal window. If future messages "
-    "match the scam or spam filters again, the warning and removal process can "
-    "start over."
+    "You are no longer subject to that pending removal. If future messages match "
+    "the scam or spam filters again, you will be put back on the list."
 )
 
 

@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.44] — Tuesday, September 29, 2026, 10:44 AM
+
+### Changed
+- Removed the “order does not matter / do not share tokens” comment line from `.env.example`.
+
+---
+
 ## [01.00.43] — Tuesday, September 29, 2026, 10:42 AM
 
 ### Changed

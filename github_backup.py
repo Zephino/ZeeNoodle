@@ -18,9 +18,11 @@ from paths import (
     backup_dir,
     backup_ignore_file,
     backup_references_dir,
+    backup_stats_file,
     data_root,
     ignore_file,
     references_dir,
+    stats_file,
 )
 
 _REMOTE_RE = re.compile(
@@ -73,6 +75,12 @@ def mirror_backup() -> None:
         dest_ignore.write_text(
             json.dumps({"channel_ids": []}, indent=2) + "\n", encoding="utf-8"
         )
+    live_stats = stats_file()
+    dest_stats = backup_stats_file()
+    if live_stats.exists():
+        shutil.copy2(live_stats, dest_stats)
+    elif dest_stats.exists():
+        dest_stats.unlink()
 
 
 def _git(*args: str, check: bool = True) -> subprocess.CompletedProcess[str]:
@@ -201,6 +209,9 @@ def _backup_files() -> list[Path]:
     ignore = backup_ignore_file()
     if ignore.exists():
         files.append(ignore)
+    stats = backup_stats_file()
+    if stats.exists():
+        files.append(stats)
     return files
 
 
@@ -283,6 +294,11 @@ def apply_backup_to_live() -> None:
         dest_ignore.write_text(
             json.dumps({"channel_ids": []}, indent=2) + "\n", encoding="utf-8"
         )
+    src_stats = backup_stats_file()
+    dest_stats = stats_file()
+    if src_stats.exists():
+        dest_stats.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(src_stats, dest_stats)
 
 
 async def _list_remote_files(

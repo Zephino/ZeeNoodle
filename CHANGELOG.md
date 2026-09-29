@@ -6,6 +6,16 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.37] — Tuesday, September 29, 2026, 10:21 AM
+
+### Added
+- Local SQLite stats DB (`config/stats.db`) logging each scam delete (user, channel, UTC time, reason). Mirrored into `backup/` and restored with `^restore`.
+- Warn → kick flow: after a delete burst settles (1 minute), DM the spammer a warning; 5 minutes later arm a 1-hour auto-kick window and push a GitHub backup of the stats DB; another scam delete in that window kicks them (or DMs opted-in admins if kick fails) and posts to `#bot-incendents`.
+- `^stats` and `^stats @user` — DM the issuing admin a text summary plus a private HTML report attachment (not hosted publicly).
+- `^notify on` / `^notify off` — persistent per-admin preference to be DMed on every scam delete.
+
+---
+
 ## [01.00.36] — Wednesday, September 16, 2026, 6:54 PM
 
 ### Added

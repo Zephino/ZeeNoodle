@@ -32,7 +32,8 @@ from github_backup import (
     run_restore,
 )
 from ignore_list import IgnoreStore
-from paths import PROJECT_ROOT, data_root, ignore_file, references_dir, seed_data_dir
+from paths import PROJECT_ROOT, data_root, ignore_file, references_dir, seed_data_dir, stats_file
+from stats_store import StatsStore
 
 load_dotenv()
 BOT_VERSION = (PROJECT_ROOT / "VERSION").read_text(encoding="utf-8").strip()
@@ -47,6 +48,7 @@ UPDATE_FILES = (
     "github_backup.py",
     "ignore_list.py",
     "paths.py",
+    "stats_store.py",
     "setup.py",
     "deploy.py",
     "requirements.txt",
@@ -60,8 +62,15 @@ _UPDATE_NOTIFY_PATH = PROJECT_ROOT / ".update_notify.json"
 INCIDENT_CHANNEL_ID = int(os.environ.get("INCIDENT_CHANNEL_ID", "1547016477104672798"))
 HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 CROSSPOST_SECONDS = int(os.environ.get("CROSSPOST_SECONDS", "120"))
+WARN_DEBOUNCE_SECONDS = int(os.environ.get("WARN_DEBOUNCE_SECONDS", "60"))
+KICK_ARM_DELAY_SECONDS = int(os.environ.get("KICK_ARM_DELAY_SECONDS", "300"))
+KICK_WINDOW_SECONDS = int(os.environ.get("KICK_WINDOW_SECONDS", "3600"))
 _MIN_TEXT_FP_LEN = 20
 _WHITESPACE_RE = re.compile(r"\s+")
+_SPAM_WARN_TEXT = (
+    "Your messages that matched ZeeNoodle's scam/spam filters were removed. "
+    "If you continue posting this content, you will be removed from the Discord server."
+)
 
 
 def load_prefix() -> str:
@@ -147,10 +156,13 @@ class ZeeNoodle(commands.Bot):
             ignore_file(),
             always_ignore={INCIDENT_CHANNEL_ID},
         )
+        self.stats = StatsStore(stats_file())
         self.session: aiohttp.ClientSession | None = None
         self._restart_pending: bool = False
         self._crossposts: dict[tuple[int, int, str], CrossPostTrack] = {}
         self._crosspost_lock = asyncio.Lock()
+        self._warn_tasks: dict[tuple[int, int], asyncio.Task] = {}
+        self._arm_tasks: dict[tuple[int, int], asyncio.Task] = {}
 
     async def setup_hook(self) -> None:
         self.session = aiohttp.ClientSession()
@@ -239,12 +251,19 @@ class ZeeNoodle(commands.Bot):
         if len(cross_channels) >= 2:
             if not match.matched:
                 return
-            deleted = await self._delete_tracked(tracked)
+            deleted_posts = await self._delete_tracked(tracked)
+            deleted = bool(deleted_posts)
             reason = f"{match.summary()}; cross-posted in {len(cross_channels)} channels"
             await self._report(
                 message, reason, evidence, deleted, channel_mentions=cross_channels
             )
             await self._clear_crosspost(message, fingerprints)
+            if deleted_posts:
+                await self._after_spam_deletes(
+                    message,
+                    reason,
+                    [(post.channel_id, post.channel_mention) for post in deleted_posts],
+                )
             return
 
         # Single-channel path: unchanged lacewin spam delete/report.
@@ -257,6 +276,12 @@ class ZeeNoodle(commands.Bot):
             deleted = False
             print(f"Could not delete message {message.id}: {exc}")
         await self._report(message, match.summary(), evidence, deleted)
+        if deleted:
+            await self._after_spam_deletes(
+                message,
+                match.summary(),
+                [(message.channel.id, message.channel.mention)],
+            )
 
     def _prune_crossposts(self, now: float) -> None:
         expired = [
@@ -316,9 +341,9 @@ class ZeeNoodle(commands.Bot):
                 key = (message.guild.id, message.author.id, fingerprint)
                 self._crossposts.pop(key, None)
 
-    async def _delete_tracked(self, tracked: list[TrackedPost]) -> bool:
-        """Delete every tracked message still present. Returns True if any delete succeeded."""
-        any_deleted = False
+    async def _delete_tracked(self, tracked: list[TrackedPost]) -> list[TrackedPost]:
+        """Delete every tracked message still present. Returns successfully deleted posts."""
+        deleted_posts: list[TrackedPost] = []
         for post in tracked:
             channel = self.get_channel(post.channel_id)
             if not isinstance(channel, discord.TextChannel):
@@ -326,10 +351,174 @@ class ZeeNoodle(commands.Bot):
             try:
                 msg = await channel.fetch_message(post.message_id)
                 await msg.delete()
-                any_deleted = True
+                deleted_posts.append(post)
             except discord.HTTPException as exc:
                 print(f"Could not delete cross-posted message {post.message_id}: {exc}")
-        return any_deleted
+        return deleted_posts
+
+    async def _after_spam_deletes(
+        self,
+        message: discord.Message,
+        reason: str,
+        channels: list[tuple[int, str]],
+    ) -> None:
+        """Log deletes, alert opted-in admins, and drive warn → arm → kick flow."""
+        if message.guild is None:
+            return
+        guild_id = message.guild.id
+        user_id = message.author.id
+        for channel_id, _mention in channels:
+            self.stats.record_deletion(guild_id, user_id, channel_id, reason)
+
+        await self._notify_admins_of_delete(message, reason, channels)
+
+        key = (guild_id, user_id)
+        if self.stats.kick_window_active(guild_id, user_id):
+            await self._kick_spammer(message.guild, message.author, reason)
+            return
+
+        # Debounce warning: wait WARN_DEBOUNCE_SECONDS after the last delete.
+        old = self._warn_tasks.pop(key, None)
+        if old and not old.done():
+            old.cancel()
+        self._warn_tasks[key] = asyncio.create_task(
+            self._warn_after_debounce(guild_id, user_id, message.author)
+        )
+
+    async def _notify_admins_of_delete(
+        self,
+        message: discord.Message,
+        reason: str,
+        channels: list[tuple[int, str]],
+    ) -> None:
+        channel_text = ", ".join(mention for _cid, mention in channels) or message.channel.mention
+        text = (
+            f"**Scam message deleted** in {channel_text}\n"
+            f"Who: {message.author.mention} (`{message.author.id}`)\n"
+            f"Why: {reason}"
+        )
+        for admin_id in self.stats.notify_user_ids():
+            try:
+                admin = await self.fetch_user(admin_id)
+                await admin.send(text)
+            except discord.HTTPException as exc:
+                print(f"[notify] Could not DM admin {admin_id}: {exc}")
+
+    async def _warn_after_debounce(
+        self, guild_id: int, user_id: int, user: discord.abc.User
+    ) -> None:
+        try:
+            await asyncio.sleep(WARN_DEBOUNCE_SECONDS)
+        except asyncio.CancelledError:
+            return
+        key = (guild_id, user_id)
+        self._warn_tasks.pop(key, None)
+
+        if self.stats.kick_window_active(guild_id, user_id):
+            return
+
+        existing = self.stats.get_enforcement(guild_id, user_id)
+        # Previous kick window expired — start a fresh cycle.
+        if (
+            existing
+            and existing["kick_expires_at"]
+            and not self.stats.kick_window_active(guild_id, user_id)
+        ):
+            self.stats.clear_enforcement(guild_id, user_id)
+            existing = None
+
+        # Already warned; 5-minute arm delay still pending.
+        if existing and existing["warn_sent_at"] and not existing["kick_armed_at"]:
+            return
+        # Already armed (active checked above) — nothing to do.
+        if existing and existing["kick_armed_at"]:
+            return
+
+        try:
+            await user.send(_SPAM_WARN_TEXT)
+        except discord.HTTPException as exc:
+            print(f"[warn] Could not DM user {user_id}: {exc}")
+        self.stats.set_warn_sent(guild_id, user_id)
+
+        old_arm = self._arm_tasks.pop(key, None)
+        if old_arm and not old_arm.done():
+            old_arm.cancel()
+        self._arm_tasks[key] = asyncio.create_task(
+            self._arm_kick_window_after_delay(guild_id, user_id)
+        )
+
+    async def _arm_kick_window_after_delay(self, guild_id: int, user_id: int) -> None:
+        try:
+            await asyncio.sleep(KICK_ARM_DELAY_SECONDS)
+        except asyncio.CancelledError:
+            return
+        key = (guild_id, user_id)
+        self._arm_tasks.pop(key, None)
+        now = datetime.datetime.now(datetime.timezone.utc)
+        armed = now.strftime("%Y-%m-%d %H:%M:%S UTC")
+        expires = (now + datetime.timedelta(seconds=KICK_WINDOW_SECONDS)).strftime(
+            "%Y-%m-%d %H:%M:%S UTC"
+        )
+        self.stats.arm_kick_window(guild_id, user_id, armed, expires)
+        print(f"[enforce] Kick window armed for user {user_id} until {expires}")
+        # Backup stats DB to GitHub when the 1-hour timer starts.
+        if self.session and github_configured():
+            err = await backup_after_change(
+                self.session,
+                f"Stats backup: kick window armed for {user_id}",
+            )
+            if err:
+                print(f"[enforce] Stats GitHub backup failed: {err}")
+
+    async def _kick_spammer(
+        self,
+        guild: discord.Guild,
+        user: discord.abc.User,
+        reason: str,
+    ) -> None:
+        member = guild.get_member(user.id)
+        if member is None:
+            try:
+                member = await guild.fetch_member(user.id)
+            except discord.HTTPException:
+                member = None
+        kicked = False
+        kick_error = ""
+        if member is None:
+            kick_error = "member not found"
+        else:
+            try:
+                await member.kick(reason=f"ZeeNoodle: repeated scam after warning ({reason})")
+                kicked = True
+            except discord.HTTPException as exc:
+                kick_error = str(exc)
+                print(f"[enforce] Kick failed for {user.id}: {exc}")
+        self.stats.clear_enforcement(guild.id, user.id)
+        key = (guild.id, user.id)
+        for bag in (self._warn_tasks, self._arm_tasks):
+            task = bag.pop(key, None)
+            if task and not task.done():
+                task.cancel()
+        status = (
+            f"Kicked {user.mention} (`{user.id}`) for repeated scam spam."
+            if kicked
+            else (
+                f"Could not kick {user.mention} (`{user.id}`): {kick_error}. "
+                "Please remove them manually."
+            )
+        )
+        for admin_id in self.stats.notify_user_ids():
+            try:
+                admin = await self.fetch_user(admin_id)
+                await admin.send(status)
+            except discord.HTTPException:
+                pass
+        incident = self.get_channel(INCIDENT_CHANNEL_ID)
+        if isinstance(incident, discord.TextChannel):
+            try:
+                await incident.send(status)
+            except discord.HTTPException:
+                pass
 
     async def _analyze(
         self, message: discord.Message
@@ -535,6 +724,7 @@ class ZeeNoodle(commands.Bot):
         Returns ``(deleted_names, errors)``.
         """
         ignore_path = ignore_file().resolve()
+        stats_path = stats_file().resolve()
         refs_path = references_dir().resolve()
         env_paths = {(PROJECT_ROOT / ".env").resolve(), ENV_PATH.resolve()}
 
@@ -572,7 +762,7 @@ class ZeeNoodle(commands.Bot):
                     continue
                 if entry.name == "config" and entry.is_dir():
                     for child in list(entry.iterdir()):
-                        if child.resolve() == ignore_path:
+                        if child.resolve() in {ignore_path, stats_path}:
                             continue
                         child_label = f"{label}/{child.name}"
                         _delete_path(child, child_label)
@@ -625,6 +815,10 @@ class StaffCog(commands.Cog):
             f"`{prefix}cleanup here <x>` — delete scam messages from the last x messages in this channel only.",
             f"`{prefix}update` — check GitHub for a newer version and apply it (restarts automatically).",
             f"`{prefix}update manual` — wipe code files (keeps .env, references, ignore list), then stop for a zip upload.",
+            f"`{prefix}stats` — DM you delete stats for all users (with an HTML report).",
+            f"`{prefix}stats @user` — DM you delete stats for one user (with an HTML report).",
+            f"`{prefix}notify on` — DM you whenever a scam message is deleted.",
+            f"`{prefix}notify off` — stop those delete DMs.",
         ]
         await ctx.send("\n".join(lines))
 
@@ -834,6 +1028,92 @@ class StaffCog(commands.Cog):
         set_env_value("COMMAND_PREFIX", prefix, ENV_PATH)
         await ctx.send(f"Prefix is now `{prefix}`. Example: `{prefix}help`.")
 
+    @commands.command(name="stats")
+    async def stats_command(
+        self, ctx: commands.Context, member: discord.Member | None = None
+    ) -> None:
+        """DM the issuing admin a stats summary and private HTML report."""
+        if ctx.guild is None:
+            return
+
+        async def dm_file(text: str, filename: str, html_body: str) -> None:
+            try:
+                await ctx.author.send(
+                    text,
+                    file=discord.File(
+                        io.BytesIO(html_body.encode("utf-8")),
+                        filename=filename,
+                    ),
+                )
+            except discord.HTTPException:
+                await ctx.send(
+                    "Could not DM you. Enable DMs from server members, then try again."
+                )
+
+        if member is None:
+            rows = self.bot.stats.user_summaries(ctx.guild.id)
+            lines = [
+                f"**ZeeNoodle delete stats** for **{ctx.guild.name}**",
+                f"Users with deletes: **{len(rows)}**",
+                f"Total deletes: **{self.bot.stats.deletion_count(ctx.guild.id)}**",
+                "",
+            ]
+            for row in rows[:25]:
+                lines.append(
+                    f"- `<@{row['user_id']}>` (`{row['user_id']}`) — "
+                    f"**{row['delete_count']}** delete(s), last {row['last_deleted_at']}"
+                )
+            if len(rows) > 25:
+                lines.append(f"…and {len(rows) - 25} more in the HTML report.")
+            html_body = self.bot.stats.render_html(ctx.guild.id, ctx.guild.name)
+            await dm_file("\n".join(lines), "zeenoodle-stats-all.html", html_body)
+        else:
+            detail = self.bot.stats.deletions_for_user(ctx.guild.id, member.id)
+            count = self.bot.stats.deletion_count(ctx.guild.id, member.id)
+            lines = [
+                f"**ZeeNoodle delete stats** for {member.mention} (`{member.id}`)",
+                f"Total deletes: **{count}**",
+                "",
+            ]
+            for row in detail[:25]:
+                lines.append(
+                    f"- <#{row['channel_id']}> — {row['deleted_at']} — {row['reason']}"
+                )
+            if len(detail) > 25:
+                lines.append(f"…and {len(detail) - 25} more in the HTML report.")
+            html_body = self.bot.stats.render_html(
+                ctx.guild.id, ctx.guild.name, user_id=member.id
+            )
+            await dm_file(
+                "\n".join(lines),
+                f"zeenoodle-stats-{member.id}.html",
+                html_body,
+            )
+        await ctx.send("Sent to your DMs.")
+
+    @commands.group(name="notify", invoke_without_command=True)
+    async def notify_group(self, ctx: commands.Context) -> None:
+        prefix = self.bot.prefix_value
+        on = self.bot.stats.notify_enabled(ctx.author.id)
+        state = "on" if on else "off"
+        await ctx.send(
+            f"Delete notifications are **{state}** for you.\n"
+            f"Use `{prefix}notify on` or `{prefix}notify off`."
+        )
+
+    @notify_group.command(name="on")
+    async def notify_on(self, ctx: commands.Context) -> None:
+        self.bot.stats.set_notify(ctx.author.id, True)
+        await ctx.send(
+            "You will be DMed whenever ZeeNoodle deletes a scam message. "
+            "This setting is saved and survives restarts."
+        )
+
+    @notify_group.command(name="off")
+    async def notify_off(self, ctx: commands.Context) -> None:
+        self.bot.stats.set_notify(ctx.author.id, False)
+        await ctx.send("Delete notification DMs are off for you.")
+
     @commands.command(name="backup")
     async def backup_command(self, ctx: commands.Context) -> None:
         await ctx.send("Saving backup...")
@@ -847,6 +1127,7 @@ class StaffCog(commands.Cog):
         if text.startswith("Restored"):
             self.bot.detector.reload()
             self.bot.ignore_store.load()
+            self.bot.stats = StatsStore(stats_file())
         await ctx.send(text)
 
     @commands.group(name="update", invoke_without_command=True)

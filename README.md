@@ -17,6 +17,7 @@ Current version is in `VERSION` (`xx.xx.xx`).
 - Narrow text such as `lacewin.com` or crypto-casino bonus wording
 - Not generic words like `giveaway` or “this print is EPIC”
 - Same image or text posted by one user in **2+ channels** within `CROSSPOST_SECONDS` (default 120): run the spam filters; if they match, delete the copies and log every channel hit
+- After deletes: wait 1 minute, warn the user by DM; 5 minutes later arm a 1-hour auto-kick window; spam again in that window → kick. Delete stats are stored in local `config/stats.db` and backed up to GitHub when the kick window arms
 
 `#bot-incendents` is always ignored. You can ignore more channels with commands.
 
@@ -81,6 +82,9 @@ Administrators only:
 - `!hostlink` — DMs you the hosting panel URL (set `HOST_URL` in `.env`)
 - `!update` — check GitHub for a newer version and apply it; restarts automatically
 - `!update manual` — wipe code files (keeps `.env`, `references/`, ignore list), stop the bot so you can upload/extract a zip and click Start
+- `!stats` — DM you delete stats for all users (text + private HTML file)
+- `!stats @user` — DM you delete stats for one user (text + private HTML file)
+- `!notify on` / `!notify off` — opt in/out of DMs whenever a scam message is deleted (persists across restarts)
 
 ## Hosting on Quaxly
 

@@ -22,6 +22,7 @@ INCLUDE_FILES = (
     "github_backup.py",
     "ignore_list.py",
     "paths.py",
+    "stats_store.py",
     "setup.py",
     "deploy.py",
     "requirements.txt",

@@ -34,6 +34,14 @@ def ignore_file() -> Path:
     return config_dir() / "ignored_channels.json"
 
 
+def stats_file() -> Path:
+    return config_dir() / "stats.db"
+
+
+def backup_stats_file() -> Path:
+    return backup_dir() / "stats.db"
+
+
 def backup_dir() -> Path:
     path = data_root() / "backup"
     path.mkdir(parents=True, exist_ok=True)

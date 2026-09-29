@@ -37,7 +37,7 @@ _STATUS_FIELDS: tuple[tuple[str, str, bool, str], ...] = (
         "KICK_WINDOW_HOURS",
         "Auto-kick window (hours)",
         False,
-        "Optional. Hours after a warning before another scam delete triggers a kick. Default is 24.",
+        "Optional. Hours after a warning before another scam delete triggers a kick. Leave blank for the built-in default.",
     ),
     (
         "DATA_DIR",

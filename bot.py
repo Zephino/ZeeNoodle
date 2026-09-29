@@ -851,7 +851,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}notify on` — DM you whenever a scam message is deleted.",
             f"`{prefix}notify off` — stop those delete DMs.",
             f"`{prefix}kicklist clear @user` — remove a user from the auto-kick list (once).",
-            f"`{prefix}kickwindow` — show or set the auto-kick window in hours (default 24).",
+            f"`{prefix}kickwindow` — show or set the auto-kick window in hours.",
         ]
         await ctx.send("\n".join(lines))
 
@@ -1193,7 +1193,7 @@ class StaffCog(commands.Cog):
             current = self.bot.kick_window_seconds / 3600
             await ctx.send(
                 f"Auto-kick window is **{current:g}** hour(s) "
-                f"(`KICK_WINDOW_HOURS`). Default is 24.\n"
+                f"(`KICK_WINDOW_HOURS`).\n"
                 f"Change it with `{self.bot.prefix_value}kickwindow <hours>`."
             )
             return

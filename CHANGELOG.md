@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.45] — Tuesday, September 29, 2026, 10:45 AM
+
+### Changed
+- `.env.example` now sets `UPDATE_REPO` to the official raw GitHub URL instead of leaving it blank.
+
+---
+
 ## [01.00.44] — Tuesday, September 29, 2026, 10:44 AM
 
 ### Changed

@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.39] — Tuesday, September 29, 2026, 10:29 AM
+
+### Changed
+- User warning and kick-list clear DMs rewritten in a professional, respectful tone. They still explain the removal risk and that an admin can clear the kick list when appropriate.
+
+---
+
 ## [01.00.38] — Tuesday, September 29, 2026, 10:27 AM
 
 ### Added

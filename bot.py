@@ -68,9 +68,19 @@ KICK_WINDOW_SECONDS = int(os.environ.get("KICK_WINDOW_SECONDS", "3600"))
 _MIN_TEXT_FP_LEN = 20
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPAM_WARN_TEXT = (
-    "Your messages that matched ZeeNoodle's scam/spam filters were removed. "
-    "If you continue posting this content, you will be removed from the Discord server. "
-    "An admin can remove you from the automatic kick list, but you have to ask them."
+    "Hello — ZeeNoodle removed one or more of your recent messages because they "
+    "matched this server's scam and spam filters.\n\n"
+    "Please do not continue posting that kind of content. If it happens again "
+    "within a short period, you may be automatically removed from the server.\n\n"
+    "If you believe this was a mistake, contact a server administrator. An admin "
+    "can clear you from the automatic kick list if they agree that is appropriate."
+)
+_SPAM_CLEAR_TEXT = (
+    "Hello — a server administrator has cleared you from ZeeNoodle's automatic "
+    "kick list.\n\n"
+    "You are no longer subject to that pending removal window. If future messages "
+    "match the scam or spam filters again, the warning and removal process can "
+    "start over."
 )
 
 
@@ -1149,10 +1159,7 @@ class StaffCog(commands.Cog):
             )
         await ctx.send(text)
         try:
-            await member.send(
-                "An admin removed you from ZeeNoodle's automatic kick list. "
-                "If you post scam/spam content again, you can be warned and kicked again."
-            )
+            await member.send(_SPAM_CLEAR_TEXT)
         except discord.HTTPException:
             pass
 

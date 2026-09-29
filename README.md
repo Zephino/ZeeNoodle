@@ -86,6 +86,7 @@ Administrators only:
 - `!stats @user` — DM you delete stats for one user (text + private HTML file)
 - `!notify on` / `!notify off` — opt in/out of DMs whenever a scam message is deleted (persists across restarts)
 - `!kicklist clear @user` — remove a user from the auto-kick list once (tracked; spam again restarts the cycle)
+- `!kickwindow` / `!kickwindow <hours>` — show or set the auto-kick window (default 24 hours; saved to `.env`)
 
 ## Hosting on Quaxly
 
@@ -126,7 +127,7 @@ See `.env.example`. Typical keys:
 | `COMMAND_PREFIX` | Command trigger (not `/`) |
 | `HASH_DISTANCE` | Image match tightness (default `10`) |
 | `CROSSPOST_SECONDS` | Window for same-content multi-channel spam checks (default `120`) |
-| `KICK_WINDOW_SECONDS` | Auto-kick window after warning arms (default `86400` = 24 hours) |
+| `KICK_WINDOW_HOURS` | Auto-kick window after warning arms (default `24`). Also settable with `!kickwindow` |
 | `DATA_DIR` | Optional persistent folder on a host |
 | `GITHUB_REMOTE` | Your repo URL only |
 | `GITHUB_TOKEN` | Your personal access token only |

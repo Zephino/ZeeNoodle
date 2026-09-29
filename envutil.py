@@ -34,6 +34,12 @@ _STATUS_FIELDS: tuple[tuple[str, str, bool, str], ...] = (
         "Optional. How close an image must be to a reference. Default is 10.",
     ),
     (
+        "KICK_WINDOW_HOURS",
+        "Auto-kick window (hours)",
+        False,
+        "Optional. Hours after a warning before another scam delete triggers a kick. Default is 24.",
+    ),
+    (
         "DATA_DIR",
         "Data directory",
         False,

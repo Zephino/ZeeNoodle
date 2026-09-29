@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.42] — Tuesday, September 29, 2026, 10:34 AM
+
+### Added
+- `KICK_WINDOW_HOURS` in `.env` (default `24`) and `^kickwindow` / `^kickwindow <hours>` so admins can view or change the auto-kick window. The value is saved to `.env`. `KICK_WINDOW_SECONDS` still works as an optional override.
+
+---
+
 ## [01.00.41] — Tuesday, September 29, 2026, 10:33 AM
 
 ### Changed

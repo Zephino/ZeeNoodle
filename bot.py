@@ -64,7 +64,6 @@ HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 CROSSPOST_SECONDS = int(os.environ.get("CROSSPOST_SECONDS", "120"))
 WARN_DEBOUNCE_SECONDS = int(os.environ.get("WARN_DEBOUNCE_SECONDS", "60"))
 KICK_ARM_DELAY_SECONDS = int(os.environ.get("KICK_ARM_DELAY_SECONDS", "300"))
-KICK_WINDOW_SECONDS = int(os.environ.get("KICK_WINDOW_SECONDS", "86400"))
 _MIN_TEXT_FP_LEN = 20
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPAM_WARN_TEXT = (
@@ -81,6 +80,27 @@ _SPAM_CLEAR_TEXT = (
     "You are no longer subject to that pending removal. If future messages match "
     "the scam or spam filters again, you will be put back on the list."
 )
+
+
+def load_kick_window_seconds() -> int:
+    """Read kick window from .env. Prefer hours (default 24); allow seconds override."""
+    hours_raw = os.environ.get("KICK_WINDOW_HOURS", "").strip()
+    seconds_raw = os.environ.get("KICK_WINDOW_SECONDS", "").strip()
+    if hours_raw:
+        try:
+            hours = float(hours_raw)
+            if hours > 0:
+                return max(60, int(hours * 3600))
+        except ValueError:
+            pass
+    if seconds_raw:
+        try:
+            seconds = int(seconds_raw)
+            if seconds > 0:
+                return seconds
+        except ValueError:
+            pass
+    return 24 * 3600
 
 
 def load_prefix() -> str:
@@ -167,6 +187,7 @@ class ZeeNoodle(commands.Bot):
             always_ignore={INCIDENT_CHANNEL_ID},
         )
         self.stats = StatsStore(stats_file())
+        self.kick_window_seconds = load_kick_window_seconds()
         self.session: aiohttp.ClientSession | None = None
         self._restart_pending: bool = False
         self._crossposts: dict[tuple[int, int, str], CrossPostTrack] = {}
@@ -466,9 +487,9 @@ class ZeeNoodle(commands.Bot):
         self._arm_tasks.pop(key, None)
         now = datetime.datetime.now(datetime.timezone.utc)
         armed = now.strftime("%Y-%m-%d %H:%M:%S UTC")
-        expires = (now + datetime.timedelta(seconds=KICK_WINDOW_SECONDS)).strftime(
-            "%Y-%m-%d %H:%M:%S UTC"
-        )
+        expires = (
+            now + datetime.timedelta(seconds=self.kick_window_seconds)
+        ).strftime("%Y-%m-%d %H:%M:%S UTC")
         self.stats.arm_kick_window(guild_id, user_id, armed, expires)
         print(f"[enforce] Kick window armed for user {user_id} until {expires}")
         # Backup stats DB to GitHub when the kick window starts.
@@ -830,6 +851,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}notify on` — DM you whenever a scam message is deleted.",
             f"`{prefix}notify off` — stop those delete DMs.",
             f"`{prefix}kicklist clear @user` — remove a user from the auto-kick list (once).",
+            f"`{prefix}kickwindow` — show or set the auto-kick window in hours (default 24).",
         ]
         await ctx.send("\n".join(lines))
 
@@ -1161,6 +1183,34 @@ class StaffCog(commands.Cog):
             await member.send(_SPAM_CLEAR_TEXT)
         except discord.HTTPException:
             pass
+
+    @commands.command(name="kickwindow")
+    async def kickwindow_command(
+        self, ctx: commands.Context, hours: float | None = None
+    ) -> None:
+        """Show or set the auto-kick window length (hours). Persists to .env."""
+        if hours is None:
+            current = self.bot.kick_window_seconds / 3600
+            await ctx.send(
+                f"Auto-kick window is **{current:g}** hour(s) "
+                f"(`KICK_WINDOW_HOURS`). Default is 24.\n"
+                f"Change it with `{self.bot.prefix_value}kickwindow <hours>`."
+            )
+            return
+        if hours <= 0 or hours > 24 * 30:
+            await ctx.send("Hours must be greater than 0 and at most 720 (30 days).")
+            return
+        seconds = max(60, int(hours * 3600))
+        self.bot.kick_window_seconds = seconds
+        # Store as hours for operators; clear seconds override if present.
+        set_env_value("KICK_WINDOW_HOURS", f"{hours:g}", ENV_PATH)
+        os.environ["KICK_WINDOW_HOURS"] = f"{hours:g}"
+        os.environ.pop("KICK_WINDOW_SECONDS", None)
+        await ctx.send(
+            f"Auto-kick window is now **{hours:g}** hour(s). "
+            "Saved to `.env` as `KICK_WINDOW_HOURS`. "
+            "Already-armed windows keep their old expiry; new arms use this value."
+        )
 
     @commands.command(name="backup")
     async def backup_command(self, ctx: commands.Context) -> None:

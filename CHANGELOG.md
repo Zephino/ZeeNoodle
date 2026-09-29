@@ -6,10 +6,10 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
-## [01.00.48] — Tuesday, September 29, 2026, 10:53 AM
+## [01.00.48] — Tuesday, September 29, 2026, 10:55 AM
 
 ### Changed
-- Removed public “default 24 hours” wording from help, README, `.env.example`, and `^kickwindow` output. The built-in default stays in code only; docs just say to leave `KICK_WINDOW_HOURS` blank or set it with `^kickwindow`.
+- `^help` and `^kickwindow` no longer mention the default kick-window length. The help line is now: show or set the auto-kick window in hours.
 
 ---
 

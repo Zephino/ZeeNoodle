@@ -17,7 +17,7 @@ Current version is in `VERSION` (`xx.xx.xx`).
 - Narrow text such as `lacewin.com` or crypto-casino bonus wording
 - Not generic words like `giveaway` or “this print is EPIC”
 - Same image or text posted by one user in **2+ channels** within `CROSSPOST_SECONDS` (default 120): run the spam filters; if they match, delete the copies and log every channel hit
-- After deletes: wait 1 minute, warn the user by DM; a short delay later arm an auto-kick window; spam again in that window → kick. Delete stats are stored in local `config/stats.db` and backed up to GitHub when the kick window arms
+- After deletes: wait 1 minute, warn the user by DM; 5 minutes later arm a **24-hour** auto-kick window; spam again in that window → kick. Delete stats are stored in local `config/stats.db` and backed up to GitHub when the kick window arms
 
 `#bot-incendents` is always ignored. You can ignore more channels with commands.
 
@@ -128,7 +128,7 @@ See `.env.example`. Typical keys:
 | `COMMAND_PREFIX` | Command trigger (not `/`) |
 | `HASH_DISTANCE` | Image match tightness (default `10`) |
 | `CROSSPOST_SECONDS` | Window for same-content multi-channel spam checks (default `120`) |
-| `KICK_WINDOW_HOURS` | Auto-kick window after warning arms (hours). Leave blank for the built-in default; also settable with `!kickwindow` |
+| `KICK_WINDOW_HOURS` | Auto-kick window after warning arms (default `24`). Also settable with `!kickwindow` |
 | `DATA_DIR` | Optional persistent folder. **Waifly: leave blank.** Quaxly: set to the volume path if the panel shows one, so pictures/config/stats survive redeploys |
 | `GITHUB_REMOTE` | Your repo URL only |
 | `GITHUB_TOKEN` | Your personal access token only |

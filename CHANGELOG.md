@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.46] — Tuesday, September 29, 2026, 10:45 AM
+
+### Changed
+- `.env.example` and README now explain `DATA_DIR`: leave blank on Waifly; set a volume path on Quaxly-style hosts only when the panel provides one.
+
+---
+
 ## [01.00.45] — Tuesday, September 29, 2026, 10:45 AM
 
 ### Changed

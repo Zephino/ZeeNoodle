@@ -105,10 +105,11 @@ Administrators only:
 1. Create a Python server named ZeeNoodle.
 2. Upload `dist/zeenoodle-quaxly.zip` on the Files tab, then Unarchive.
 3. Upload your local `.env` into the same folder as `bot.py`.
-4. Confirm Startup Command 1 is `pip install -r requirements.txt` and Command 2 is `python bot.py`.
-5. Open Console and click **Start**. The bot stays offline until you do this.
-6. Stay on Console. `pip install` can take several minutes. Do not click Start again.
-7. Wait until you see `ZeeNoodle logged in as ...`. That line means login finished.
+4. Leave `DATA_DIR` blank in `.env` unless Waifly gives you a separate volume path (unusual).
+5. Confirm Startup Command 1 is `pip install -r requirements.txt` and Command 2 is `python bot.py`.
+6. Open Console and click **Start**. The bot stays offline until you do this.
+7. Stay on Console. `pip install` can take several minutes. Do not click Start again.
+8. Wait until you see `ZeeNoodle logged in as ...`. That line means login finished.
 
 ## GitHub backup (optional)
 
@@ -128,7 +129,7 @@ See `.env.example`. Typical keys:
 | `HASH_DISTANCE` | Image match tightness (default `10`) |
 | `CROSSPOST_SECONDS` | Window for same-content multi-channel spam checks (default `120`) |
 | `KICK_WINDOW_HOURS` | Auto-kick window after warning arms (default `24`). Also settable with `!kickwindow` |
-| `DATA_DIR` | Optional persistent folder on a host |
+| `DATA_DIR` | Optional persistent folder. **Waifly: leave blank.** Quaxly: set to the volume path if the panel shows one, so pictures/config/stats survive redeploys |
 | `GITHUB_REMOTE` | Your repo URL only |
 | `GITHUB_TOKEN` | Your personal access token only |
 | `GITHUB_BRANCH` | Branch for backup data — use `data`, not `main` (default `data`) |

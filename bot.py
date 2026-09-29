@@ -64,7 +64,7 @@ HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 CROSSPOST_SECONDS = int(os.environ.get("CROSSPOST_SECONDS", "120"))
 WARN_DEBOUNCE_SECONDS = int(os.environ.get("WARN_DEBOUNCE_SECONDS", "60"))
 KICK_ARM_DELAY_SECONDS = int(os.environ.get("KICK_ARM_DELAY_SECONDS", "300"))
-KICK_WINDOW_SECONDS = int(os.environ.get("KICK_WINDOW_SECONDS", "3600"))
+KICK_WINDOW_SECONDS = int(os.environ.get("KICK_WINDOW_SECONDS", "86400"))
 _MIN_TEXT_FP_LEN = 20
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPAM_WARN_TEXT = (
@@ -471,7 +471,7 @@ class ZeeNoodle(commands.Bot):
         )
         self.stats.arm_kick_window(guild_id, user_id, armed, expires)
         print(f"[enforce] Kick window armed for user {user_id} until {expires}")
-        # Backup stats DB to GitHub when the 1-hour timer starts.
+        # Backup stats DB to GitHub when the kick window starts.
         if self.session and github_configured():
             err = await backup_after_change(
                 self.session,

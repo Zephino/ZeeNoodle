@@ -6,6 +6,13 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.41] — Tuesday, September 29, 2026, 10:33 AM
+
+### Changed
+- Auto-kick window after a warning is now **24 hours** (default `KICK_WINDOW_SECONDS=86400`) instead of 1 hour. Another scam delete in that window still triggers a kick.
+
+---
+
 ## [01.00.40] — Tuesday, September 29, 2026, 10:32 AM
 
 ### Changed

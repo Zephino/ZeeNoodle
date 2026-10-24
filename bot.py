@@ -8,7 +8,6 @@ import hashlib
 import io
 import json
 import os
-import random
 import re
 import shutil
 import subprocess
@@ -32,6 +31,7 @@ from github_backup import (
     run_restore,
 )
 from ignore_list import IgnoreStore
+from memory_guard import current_rss_mb, trim_memory
 from paths import PROJECT_ROOT, data_root, ignore_file, references_dir, seed_data_dir, stats_file
 from stats_store import StatsStore
 
@@ -49,6 +49,7 @@ UPDATE_FILES = (
     "ignore_list.py",
     "paths.py",
     "stats_store.py",
+    "memory_guard.py",
     "setup.py",
     "deploy.py",
     "requirements.txt",
@@ -64,6 +65,10 @@ HASH_DISTANCE = int(os.environ.get("HASH_DISTANCE", "10"))
 CROSSPOST_SECONDS = int(os.environ.get("CROSSPOST_SECONDS", "120"))
 WARN_DEBOUNCE_SECONDS = int(os.environ.get("WARN_DEBOUNCE_SECONDS", "60"))
 KICK_ARM_DELAY_SECONDS = int(os.environ.get("KICK_ARM_DELAY_SECONDS", "300"))
+MEM_SOFT_LIMIT_MB = int(os.environ.get("MEM_SOFT_LIMIT_MB", "200"))
+MEM_HARD_LIMIT_MB = int(os.environ.get("MEM_HARD_LIMIT_MB", "260"))
+_MAX_IMAGE_BYTES = 8 * 1024 * 1024
+_DISCORD_CDN_HOSTS = ("cdn.discordapp.com", "media.discordapp.net")
 _MIN_TEXT_FP_LEN = 20
 _WHITESPACE_RE = re.compile(r"\s+")
 _SPAM_WARN_TEXT = (
@@ -115,6 +120,18 @@ def _is_image_attachment(attachment: discord.Attachment) -> bool:
     if attachment.content_type and attachment.content_type.startswith("image/"):
         return True
     return Path(attachment.filename).suffix.lower() in IMAGE_SUFFIXES
+
+
+def _is_discord_cdn(url: str) -> bool:
+    return any(host in url for host in _DISCORD_CDN_HOSTS)
+
+
+def _discord_thumb_url(url: str) -> str:
+    """Ask Discord's CDN for a 512px copy when the host supports it."""
+    if not _is_discord_cdn(url):
+        return url
+    sep = "&" if "?" in url else "?"
+    return f"{url}{sep}width=512&height=512"
 
 
 def _message_text(message: discord.Message) -> str:
@@ -179,6 +196,9 @@ class ZeeNoodle(commands.Bot):
             intents=intents,
             help_command=None,
             case_insensitive=True,
+            max_messages=None,
+            member_cache_flags=discord.MemberCacheFlags.none(),
+            chunk_guilds_at_startup=False,
         )
         seed_data_dir()
         self.detector = Detector(references_dir(), max_distance=HASH_DISTANCE)
@@ -190,32 +210,20 @@ class ZeeNoodle(commands.Bot):
         self.kick_window_seconds = load_kick_window_seconds()
         self.session: aiohttp.ClientSession | None = None
         self._restart_pending: bool = False
+        self._trimmed_on_ready: bool = False
+        self._started_at = time.monotonic()
         self._crossposts: dict[tuple[int, int, str], CrossPostTrack] = {}
         self._crosspost_lock = asyncio.Lock()
         self._warn_tasks: dict[tuple[int, int], asyncio.Task] = {}
         self._arm_tasks: dict[tuple[int, int], asyncio.Task] = {}
 
     async def setup_hook(self) -> None:
-        self.session = aiohttp.ClientSession()
+        self.session = aiohttp.ClientSession(
+            timeout=aiohttp.ClientTimeout(total=20)
+        )
         await self.add_cog(StaffCog(self))
         mirror_backup()
-        self.loop.create_task(self._keepalive_loop())
-
-    async def _keepalive_loop(self) -> None:
-        """Write a heartbeat file at a random interval (12–20 h) to keep the
-        hosting container active and avoid inactivity suspension."""
-        heartbeat_path = data_root() / "heartbeat.txt"
-        while not self.is_closed():
-            delay = random.uniform(12 * 3600, 20 * 3600)  # 12–20 hours in seconds
-            await asyncio.sleep(delay)
-            try:
-                heartbeat_path.write_text(
-                    f"alive at {time.strftime('%Y-%m-%d %H:%M:%S UTC', time.gmtime())}\n",
-                    encoding="utf-8",
-                )
-                print(f"[keepalive] heartbeat written ({delay / 3600:.1f} h interval)")
-            except Exception as exc:  # noqa: BLE001
-                print(f"[keepalive] write failed: {exc}")
+        self.loop.create_task(self._memory_guard_loop())
 
     async def close(self) -> None:
         if self.session:
@@ -255,6 +263,9 @@ class ZeeNoodle(commands.Bot):
                 print(f"[update] Could not send online DM: {exc}")
             finally:
                 _UPDATE_NOTIFY_PATH.unlink(missing_ok=True)
+        if not self._trimmed_on_ready:
+            trim_memory()
+            self._trimmed_on_ready = True
 
     async def on_message(self, message: discord.Message) -> None:
         if self.user is None or message.author.id == self.user.id:
@@ -507,12 +518,10 @@ class ZeeNoodle(commands.Bot):
         user: discord.abc.User,
         reason: str,
     ) -> None:
-        member = guild.get_member(user.id)
-        if member is None:
-            try:
-                member = await guild.fetch_member(user.id)
-            except discord.HTTPException:
-                member = None
+        try:
+            member = await guild.fetch_member(user.id)
+        except discord.HTTPException:
+            member = None
         kicked = False
         kick_error = ""
         if member is None:
@@ -551,6 +560,21 @@ class ZeeNoodle(commands.Bot):
             except discord.HTTPException:
                 pass
 
+    async def _read_attachment_image(
+        self, attachment: discord.Attachment
+    ) -> bytes | None:
+        """Download a resized copy when possible; skip files over 8 MB."""
+        if attachment.size and attachment.size > _MAX_IMAGE_BYTES:
+            return None
+        url = attachment.proxy_url or attachment.url
+        data = await self._download(_discord_thumb_url(url))
+        if data:
+            return data
+        try:
+            return await attachment.read()
+        except discord.HTTPException:
+            return None
+
     async def _analyze(
         self, message: discord.Message
     ) -> tuple[list[str], list[tuple[str, bytes]], Match]:
@@ -561,25 +585,27 @@ class ZeeNoodle(commands.Bot):
         for attachment in message.attachments:
             if not _is_image_attachment(attachment):
                 continue
-            try:
-                data = await attachment.read()
-            except discord.HTTPException:
+            data = await self._read_attachment_image(attachment)
+            if not data:
                 continue
-            hashed = self.detector.hash_bytes(data)
-            if hashed is not None:
-                fingerprints.append(f"img:{hashed}")
-            hits = self.detector.match_image(data)
+            hashed = await asyncio.to_thread(self.detector.hash_bytes, data)
+            if hashed is None:
+                continue
+            fingerprints.append(f"img:{hashed}")
+            hits = self.detector.match_hash(hashed)
             if hits:
                 image_hits.extend(hits)
                 evidence.append((attachment.filename, data))
         for url in _embed_image_urls(message):
-            data = await self._download(url)
+            fetch = _discord_thumb_url(url) if _is_discord_cdn(url) else url
+            data = await self._download(fetch)
             if not data:
                 continue
-            hashed = self.detector.hash_bytes(data)
-            if hashed is not None:
-                fingerprints.append(f"img:{hashed}")
-            hits = self.detector.match_image(data)
+            hashed = await asyncio.to_thread(self.detector.hash_bytes, data)
+            if hashed is None:
+                continue
+            fingerprints.append(f"img:{hashed}")
+            hits = self.detector.match_hash(hashed)
             if hits:
                 image_hits.extend(hits)
                 evidence.append(("embed.png", data))
@@ -593,6 +619,39 @@ class ZeeNoodle(commands.Bot):
         return unique_fps, evidence, Match(
             image_hits=tuple(image_hits), text_reasons=text_reasons
         )
+
+    async def _memory_guard_loop(self) -> None:
+        """Trim heap on a schedule and restart if RSS stays above the hard limit."""
+        last_periodic = time.monotonic()
+        while not self.is_closed():
+            await asyncio.sleep(60)
+            now = time.monotonic()
+            if now - last_periodic >= 30 * 60:
+                trim_memory()
+                last_periodic = now
+            rss = current_rss_mb()
+            if rss is None:
+                continue
+            if rss > MEM_SOFT_LIMIT_MB:
+                trim_memory()
+                after = current_rss_mb()
+                after_text = f"{after:.1f}" if after is not None else "?"
+                print(f"[memory] soft limit hit: {rss:.1f} MB -> {after_text} MB")
+                rss = after if after is not None else rss
+            if rss > MEM_HARD_LIMIT_MB:
+                print(f"[memory] hard limit hit: {rss:.1f} MB — restarting")
+                incident = self.get_channel(INCIDENT_CHANNEL_ID)
+                if isinstance(incident, discord.TextChannel):
+                    try:
+                        await incident.send(
+                            f"ZeeNoodle restarting: RAM {rss:.0f} MB exceeded "
+                            f"hard limit {MEM_HARD_LIMIT_MB} MB."
+                        )
+                    except discord.HTTPException:
+                        pass
+                self._restart_pending = True
+                await self.close()
+                return
 
     async def _download(self, url: str, *, bust_cache: bool = False) -> bytes | None:
         if not self.session:
@@ -747,6 +806,7 @@ class ZeeNoodle(commands.Bot):
 
             channels_scanned += 1
 
+        trim_memory()
         return total_deleted, channels_scanned
 
     def _wipe_for_manual_update(self) -> tuple[list[str], list[tuple[str, str]]]:
@@ -819,7 +879,17 @@ class StaffCog(commands.Cog):
     async def cog_check(self, ctx: commands.Context) -> bool:
         if ctx.command is not None and ctx.command.name == "help":
             return True
-        if ctx.guild is None or not _is_admin(ctx.author):
+        if ctx.guild is None:
+            await ctx.send("Administrators only.")
+            return False
+        member = ctx.author
+        if not isinstance(member, discord.Member):
+            try:
+                member = await ctx.guild.fetch_member(ctx.author.id)
+            except discord.HTTPException:
+                await ctx.send("Administrators only.")
+                return False
+        if not _is_admin(member):
             await ctx.send("Administrators only.")
             return False
         return True
@@ -852,6 +922,7 @@ class StaffCog(commands.Cog):
             f"`{prefix}notify off` — stop those delete DMs.",
             f"`{prefix}kicklist clear @user` — remove a user from the auto-kick list (once).",
             f"`{prefix}kickwindow` — show or set the auto-kick window in hours.",
+            f"`{prefix}memory` — show RAM use, limits, and uptime.",
         ]
         await ctx.send("\n".join(lines))
 
@@ -904,15 +975,35 @@ class StaffCog(commands.Cog):
             return
         lines: list[str] = []
         for attachment in images:
-            data = await attachment.read()
-            hits = self.bot.detector.match_image(data)
+            data = await self.bot._read_attachment_image(attachment)
+            if not data:
+                lines.append(
+                    f"`{attachment.filename}` could not be read (over 8 MB or download failed)."
+                )
+                continue
+            hashed = await asyncio.to_thread(self.bot.detector.hash_bytes, data)
+            if hashed is None:
+                lines.append(f"`{attachment.filename}` is not a readable image.")
+                continue
+            hits = self.bot.detector.match_hash(hashed)
+            closest = self.bot.detector.closest_hit(hashed)
             if hits:
                 reasons = ", ".join(
                     f"`{h.reference}` (distance {h.distance})" for h in hits
                 )
-                lines.append(f"`{attachment.filename}` **would be deleted** — matched {reasons}.")
+                lines.append(
+                    f"`{attachment.filename}` **would be deleted** — matched {reasons}."
+                )
             else:
-                lines.append(f"`{attachment.filename}` would **not** match any reference image.")
+                extra = ""
+                if closest:
+                    extra = (
+                        f" Closest: `{closest.reference}` "
+                        f"(distance {closest.distance})."
+                    )
+                lines.append(
+                    f"`{attachment.filename}` would **not** match any reference image.{extra}"
+                )
         await ctx.send("\n".join(lines))
 
     @picture.command(name="list")
@@ -1212,6 +1303,20 @@ class StaffCog(commands.Cog):
             "Already-armed windows keep their old expiry; new arms use this value."
         )
 
+    @commands.command(name="memory")
+    async def memory_command(self, ctx: commands.Context) -> None:
+        rss = current_rss_mb()
+        rss_text = f"{rss:.1f} MB" if rss is not None else "unavailable"
+        uptime = int(time.monotonic() - self.bot._started_at)
+        hours, rem = divmod(uptime, 3600)
+        minutes, seconds = divmod(rem, 60)
+        await ctx.send(
+            f"RAM: {rss_text}\n"
+            f"Soft limit: {MEM_SOFT_LIMIT_MB} MB\n"
+            f"Hard limit: {MEM_HARD_LIMIT_MB} MB\n"
+            f"Uptime: {hours}h {minutes}m {seconds}s"
+        )
+
     @commands.command(name="backup")
     async def backup_command(self, ctx: commands.Context) -> None:
         await ctx.send("Saving backup...")
@@ -1263,16 +1368,13 @@ class StaffCog(commands.Cog):
             )
         await dm("\n".join(dm_lines))
         # Re-install packages in a thread so the event loop stays alive.
-        loop = asyncio.get_event_loop()
-        await loop.run_in_executor(
-            None,
-            lambda: subprocess.run(
-                [
-                    sys.executable, "-m", "pip", "install",
-                    "-r", str(PROJECT_ROOT / "requirements.txt"), "-q",
-                ],
-                check=False,
-            ),
+        await asyncio.to_thread(
+            subprocess.run,
+            [
+                sys.executable, "-m", "pip", "install",
+                "-r", str(PROJECT_ROOT / "requirements.txt"), "-q",
+            ],
+            check=False,
         )
         await dm("Packages up to date. Restarting in 3 seconds...")
         # If a personal backup is configured, restore pictures and config now

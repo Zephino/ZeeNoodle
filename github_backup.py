@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
 import os
@@ -99,6 +100,16 @@ def _git_available() -> bool:
     except (OSError, subprocess.CalledProcessError):
         return False
     return True
+
+
+def _git_restore_backup(
+    remote: str, branch: str, token: str, owner: str, repo: str
+) -> None:
+    _ensure_git_repo(remote, branch)
+    encoded = quote(token, safe="")
+    fetch_url = f"https://x-access-token:{encoded}@github.com/{owner}/{repo}.git"
+    _git("fetch", fetch_url, branch)
+    _git("checkout", "FETCH_HEAD", "--", "backup")
 
 
 async def ensure_github_repo(session: aiohttp.ClientSession) -> str | None:
@@ -344,12 +355,8 @@ async def download_from_github(session: aiohttp.ClientSession) -> str | None:
     dest = backup_dir()
     dest.mkdir(parents=True, exist_ok=True)
     try:
-        if _git_available():
-            _ensure_git_repo(remote, branch)
-            encoded = quote(token, safe="")
-            fetch_url = f"https://x-access-token:{encoded}@github.com/{owner}/{repo}.git"
-            _git("fetch", fetch_url, branch)
-            _git("checkout", "FETCH_HEAD", "--", "backup")
+        if await asyncio.to_thread(_git_available):
+            await asyncio.to_thread(_git_restore_backup, remote, branch, token, owner, repo)
             return None
         files = await _list_remote_files(
             session, owner, repo, branch, headers, "backup"
@@ -383,8 +390,8 @@ async def backup_after_change(
     created = await ensure_github_repo(session)
     if created:
         return created
-    if _git_available():
-        return commit_and_push(message)
+    if await asyncio.to_thread(_git_available):
+        return await asyncio.to_thread(commit_and_push, message)
     return await upload_via_contents_api(session, message)
 
 

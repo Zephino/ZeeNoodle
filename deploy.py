@@ -23,6 +23,7 @@ INCLUDE_FILES = (
     "ignore_list.py",
     "paths.py",
     "stats_store.py",
+    "memory_guard.py",
     "setup.py",
     "deploy.py",
     "requirements.txt",

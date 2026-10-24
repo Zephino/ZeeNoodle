@@ -76,14 +76,23 @@ class Detector:
     def names(self) -> list[str]:
         return [name for name, _ in self.references]
 
+    def _hash_image(self, img: Image.Image) -> imagehash.ImageHash:
+        """Perceptual hash after shrinking so references and incoming images match."""
+        img.draft("RGB", (512, 512))
+        img.thumbnail((512, 512))
+        return imagehash.phash(img.convert("RGB"))
+
     def _load(self, folder: Path) -> None:
         if not folder.is_dir():
             return
         for path in sorted(folder.iterdir()):
             if path.suffix.lower() not in IMAGE_SUFFIXES:
                 continue
-            with Image.open(path) as img:
-                self.references.append((path.name, imagehash.phash(img.convert("RGB"))))
+            try:
+                with Image.open(path) as img:
+                    self.references.append((path.name, self._hash_image(img)))
+            except Exception as exc:  # noqa: BLE001
+                print(f"[detector] failed to hash {path.name}: {exc}")
 
     def add_image(self, data: bytes) -> str:
         """Save *data* as a new reference image with an auto-generated name.
@@ -123,20 +132,31 @@ class Detector:
     def hash_bytes(self, data: bytes) -> imagehash.ImageHash | None:
         try:
             with Image.open(io.BytesIO(data)) as img:
-                return imagehash.phash(img.convert("RGB"))
+                return self._hash_image(img)
         except OSError:
             return None
 
-    def match_image(self, data: bytes) -> tuple[ImageHit, ...]:
-        hashed = self.hash_bytes(data)
-        if hashed is None:
-            return ()
+    def match_hash(self, hashed: imagehash.ImageHash) -> tuple[ImageHit, ...]:
         hits = []
         for name, ref in self.references:
             distance = hashed - ref
             if distance <= self.max_distance:
                 hits.append(ImageHit(name, int(distance)))
         return tuple(hits)
+
+    def closest_hit(self, hashed: imagehash.ImageHash) -> ImageHit | None:
+        best: ImageHit | None = None
+        for name, ref in self.references:
+            distance = int(hashed - ref)
+            if best is None or distance < best.distance:
+                best = ImageHit(name, distance)
+        return best
+
+    def match_image(self, data: bytes) -> tuple[ImageHit, ...]:
+        hashed = self.hash_bytes(data)
+        if hashed is None:
+            return ()
+        return self.match_hash(hashed)
 
     def match_text(self, text: str) -> tuple[str, ...]:
         if not text.strip():

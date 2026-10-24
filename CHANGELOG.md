@@ -6,6 +6,16 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.49] — Saturday, October 24, 2026, 11:18 AM
+
+### Added
+- `memory_guard.py` plus `!memory`. A 60-second loop trims unused heap every 30 minutes, trims immediately if RSS exceeds `MEM_SOFT_LIMIT_MB` (default 200), and clean-restarts if RSS stays above `MEM_HARD_LIMIT_MB` (default 260) so a 300 MB host does not OOM.
+
+### Changed
+- Discord caches are off (`max_messages=None`, no member cache, no guild chunking). Images are hashed after a 512 px shrink (references and incoming), attachments over 8 MB are skipped, and hashing/git backup run off the event loop. `_keepalive_loop` is removed.
+
+---
+
 ## [01.00.48] — Tuesday, September 29, 2026, 10:55 AM
 
 ### Changed

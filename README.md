@@ -87,6 +87,7 @@ Administrators only:
 - `!notify on` / `!notify off` — opt in/out of DMs whenever a scam message is deleted (persists across restarts)
 - `!kicklist clear @user` — remove a user from the auto-kick list once (tracked; spam again restarts the cycle)
 - `!kickwindow` / `!kickwindow <hours>` — show or set the auto-kick window (saved to `.env`)
+- `!memory` — show current RAM use, soft/hard limits, and uptime
 
 ## Hosting on Quaxly
 
@@ -135,6 +136,8 @@ See `.env.example`. Typical keys:
 | `GITHUB_BRANCH` | Branch for backup data — use `data`, not `main` (default `data`) |
 | `HOST_URL` | Your hosting panel URL (sent via DM by `!hostlink`) |
 | `UPDATE_REPO` | Raw GitHub URL to pull updates from (default: official repo) |
+| `MEM_SOFT_LIMIT_MB` | RAM (MB) at which unused heap is freed (default `200`) |
+| `MEM_HARD_LIMIT_MB` | RAM (MB) at which the bot restarts itself (default `260`) |
 
 ## Self-host
 

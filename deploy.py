@@ -17,6 +17,7 @@ ENV_PATH = PROJECT_ROOT / ".env"
 
 INCLUDE_FILES = (
     "bot.py",
+    "run.py",
     "detector.py",
     "envutil.py",
     "github_backup.py",
@@ -105,7 +106,7 @@ def _print_wait_for_login(*, click_start: bool = True) -> None:
 
 
 def _print_secret_hints() -> None:
-    print("Start command: python bot.py")
+    print("Start command: python run.py")
     print("Set DATA_DIR to the volume path if Quaxly shows one.\n")
     print("Keys (copy values from your local .env; tokens are not printed):")
     for key, present in _env_status().items():
@@ -220,7 +221,7 @@ def main_waifly(update_existing: bool = False) -> None:
     print("Step 6: Check startup settings.")
     print("  - Go to the Startup tab.")
     print("  - Startup Command 1 should be: pip install -r requirements.txt")
-    print("  - Startup Command 2 should be: python bot.py")
+    print("  - Startup Command 2 should be: python run.py")
     print("  - Leave everything else as is.")
     input("\nPress Enter after confirming startup settings. Next: click Start.\n")
 
@@ -229,7 +230,7 @@ def main_waifly(update_existing: bool = False) -> None:
     _print_wait_for_login(click_start=True)
     input("\nPress Enter only after you see ZeeNoodle logged in as ...\n")
     print("Done. ZeeNoodle is now running 24/7 on Waifly.")
-    print("Note: Waifly suspends servers idle for 3 days. Keep the bot running.")
+    print("Note: Waifly suspends free servers that are offline for 3 days. run.py restarts the bot after crashes.")
 
 
 if __name__ == "__main__":

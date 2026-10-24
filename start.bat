@@ -192,7 +192,7 @@ if "%CHOICE%"=="2" (
         )
     )
     echo Starting ZeeNoodle. Leave this window open.
-    %PY% bot.py
+    %PY% run.py
     pause
     exit /b 0
 )
@@ -205,7 +205,7 @@ if "%CHOICE%"=="3" (
     echo 3. In the project folder run: python -m pip install -r requirements.txt
     echo 4. Create .env from .env.example. Set DISCORD_TOKEN and INCIDENT_CHANNEL_ID.
     echo    Leave GITHUB_REMOTE and GITHUB_TOKEN blank unless they are YOURS.
-    echo 5. Start and keep it running: python bot.py
+    echo 5. Start and keep it running: python run.py
     echo 6. On Windows you can use Task Scheduler to run start.bat after login.
     echo    On Linux use systemd or screen/tmux so it restarts after reboot.
     echo 7. To update later, run start.bat again and choose Update from GitHub.
@@ -251,7 +251,7 @@ if not exist ".env" (
     %PY% setup.py
 )
 echo Starting the updated bot. Close any old ZeeNoodle window first.
-%PY% bot.py
+%PY% run.py
 pause
 exit /b 0
 

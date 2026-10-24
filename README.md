@@ -95,7 +95,7 @@ Administrators only:
 
 1. Run `start.bat` and accept Quaxly, or run `python deploy.py`.
 2. Upload `dist/zeenoodle-quaxly.zip` (no `.env`) or connect **your** GitHub repo.
-3. Set secrets in the Quaxly panel. Start command: `python bot.py`.
+3. Set secrets in the Quaxly panel. Start command: `python run.py`.
 4. If Quaxly shows a volume path, set `DATA_DIR` so pictures survive deploys.
 5. Click Start or Deploy, then stay on the logs. The first install can take several minutes. Wait for `ZeeNoodle logged in as ...` before you leave.
 
@@ -107,10 +107,12 @@ Administrators only:
 2. Upload `dist/zeenoodle-quaxly.zip` on the Files tab, then Unarchive.
 3. Upload your local `.env` into the same folder as `bot.py`.
 4. Leave `DATA_DIR` blank in `.env` unless Waifly gives you a separate volume path (unusual).
-5. Confirm Startup Command 1 is `pip install -r requirements.txt` and Command 2 is `python bot.py`.
+5. Confirm Startup Command 1 is `pip install -r requirements.txt` and Command 2 is `python run.py`.
 6. Open Console and click **Start**. The bot stays offline until you do this.
 7. Stay on Console. `pip install` can take several minutes. Do not click Start again.
 8. Wait until you see `ZeeNoodle logged in as ...`. That line means login finished.
+
+Waifly suspends free servers that stay offline for 3 days. `run.py` restarts the bot after crashes so it stays online. To stop the bot on purpose, use the panel **Stop** button or `!update manual`.
 
 ## GitHub backup (optional)
 
@@ -144,8 +146,10 @@ See `.env.example`. Typical keys:
 ```text
 python -m pip install -r requirements.txt
 python setup.py
-python bot.py
+python run.py
 ```
+
+`run.py` restarts the bot after crashes. Use `python bot.py` if you want a single run with no restarts.
 
 Keep the process running (this PC, Task Scheduler, or systemd on a server).
 

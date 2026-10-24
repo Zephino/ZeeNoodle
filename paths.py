@@ -30,6 +30,11 @@ def config_dir() -> Path:
     return path
 
 
+def stop_flag_file() -> Path:
+    """Flag file that tells run.py the bot stopped on purpose (no restart)."""
+    return data_root() / ".stop_requested"
+
+
 def ignore_file() -> Path:
     return config_dir() / "ignored_channels.json"
 

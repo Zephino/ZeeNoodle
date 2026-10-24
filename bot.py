@@ -32,7 +32,15 @@ from github_backup import (
 )
 from ignore_list import IgnoreStore
 from memory_guard import current_rss_mb, trim_memory
-from paths import PROJECT_ROOT, data_root, ignore_file, references_dir, seed_data_dir, stats_file
+from paths import (
+    PROJECT_ROOT,
+    data_root,
+    ignore_file,
+    references_dir,
+    seed_data_dir,
+    stats_file,
+    stop_flag_file,
+)
 from stats_store import StatsStore
 
 load_dotenv()
@@ -41,6 +49,9 @@ UPDATE_REPO = os.environ.get(
     "UPDATE_REPO",
     "https://raw.githubusercontent.com/Zephino/ZeeNoodle/main",
 ).rstrip("/")
+# Exit code that tells run.py to restart immediately (see run.py).
+RESTART_EXIT_CODE = 75
+
 UPDATE_FILES = (
     "bot.py",
     "detector.py",
@@ -50,6 +61,7 @@ UPDATE_FILES = (
     "paths.py",
     "stats_store.py",
     "memory_guard.py",
+    "run.py",
     "setup.py",
     "deploy.py",
     "requirements.txt",
@@ -1450,6 +1462,11 @@ class StaffCog(commands.Cog):
             "5. Click **Start** on the Console tab.\n"
             "6. Wait for `ZeeNoodle logged in as ...`"
         )
+        # Tell run.py not to restart the bot while files are being replaced.
+        try:
+            stop_flag_file().write_text("manual update\n", encoding="utf-8")
+        except OSError as exc:
+            print(f"[update] Could not write stop flag: {exc}")
         await asyncio.sleep(2)
         await self.bot.close()
 
@@ -1521,6 +1538,10 @@ def main() -> None:
     bot = ZeeNoodle()
     bot.run(token)
     if bot._restart_pending:
+        if os.environ.get("ZEENOODLE_SUPERVISED") == "1":
+            # run.py restarts the bot right away when it sees this exit code.
+            print("[restart] Exiting so run.py restarts the bot...", flush=True)
+            sys.exit(RESTART_EXIT_CODE)
         print("[update] Restarting with updated code...")
         os.execv(sys.executable, [sys.executable, str(Path(__file__).resolve())])
 

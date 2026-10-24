@@ -6,6 +6,18 @@ Each release heading uses **`## [xx.xx.xx] — Weekday, Month D, YYYY, h:mm AM/P
 
 ---
 
+## [01.00.50] — Saturday, October 24, 2026, 11:32 AM
+
+### Added
+- `run.py` supervisor that restarts `bot.py` after crashes, with a 10 s delay and a 5-minute back-off after 5 exits in 5 minutes. Waifly suspends free servers that stay offline for 3 days, so the bot must come back on its own.
+- `stop_flag_file()` in `paths.py`. `!update manual` writes `.stop_requested` so `run.py` does not restart the bot while files are replaced.
+
+### Changed
+- `!update` and the memory hard-limit restart exit with code `75` when running under `run.py`, instead of `os.execv`. The supervisor restarts the bot right away, and Windows no longer risks two copies running.
+- Start command is now `python run.py` in `Procfile`, README, `deploy.py`, and `start.bat`. `run.py` is added to the deploy zip and `UPDATE_FILES` so it ships with updates.
+
+---
+
 ## [01.00.49] — Saturday, October 24, 2026, 11:18 AM
 
 ### Added

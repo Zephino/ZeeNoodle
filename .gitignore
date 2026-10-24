@@ -7,3 +7,4 @@ __pycache__/
 .pytest_cache/
 dist/
 .update_notify.json
+.stop_requested
